@@ -1,3 +1,2 @@
-matplotlib
-numpy
+opencv-python
 warp-lang
