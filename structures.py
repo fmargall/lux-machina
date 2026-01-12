@@ -43,3 +43,7 @@ class LightSource:
 @wp.struct
 class Primitive:
     type: wp.int32
+    p0  : wp.vec2
+    p1  : wp.vec2
+    ni  : wp.float32
+    no  : wp.float32

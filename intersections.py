@@ -2,6 +2,7 @@ import warp as wp
 
 from structures import Intersection, Primitive, Ray
 
+
 @wp.kernel
 def intersectRays(
     raysBuffer: wp.array(dtype=Ray, ndim=1),
@@ -14,11 +15,21 @@ def intersectRays(
     ID = wp.tid()
 
     ray = raysBuffer[ID]
-    
-    # Saving intersection properties
-    intersection = Intersection()
-    intersection.hitPoint = ray.origin + 1000.0 * ray.direction # No intersection, far away
-    intersectionsBuffer[ID] = intersection
 
-    # Saving ray status
-    raysStatusBuffer[0] = ray.alive
+    # Initializing intersection
+    intersection = Intersection()
+    intersection.hitPoint = ray.origin + 1.e12 * ray.direction # Initially no intersection
+    intersectionsBuffer[ID] = intersection
+    
+    # Setting ray as dead by default
+    raysStatusBuffer[0] = False
+
+    for primitiveID in range(nbPrimitives):
+        primitive = primitivesBuffer[primitiveID]
+
+        if primitive.type == 0: # Segment
+            continue
+        else:
+            continue
+
+
