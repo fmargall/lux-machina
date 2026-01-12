@@ -5,7 +5,6 @@ class Ray:
     origin   : wp.vec2
     direction: wp.vec2
     depth    : wp.int32
-    energy   : wp.float32
     weight   : wp.float32
     alive    : wp.bool
 
@@ -17,6 +16,7 @@ class Segment:
 
 @wp.struct
 class Intersection:
+    missed  : wp.bool # whether an intersection occurred
     hitPoint: wp.vec2
     normal  : wp.vec2 # surface normal at intersection (pointing outside)
     ni      : wp.float32 # refractive index outside (in front of normal)
@@ -43,3 +43,7 @@ class LightSource:
 @wp.struct
 class Primitive:
     type: wp.int32
+    p0  : wp.vec2
+    p1  : wp.vec2
+    ni  : wp.float32
+    no  : wp.float32

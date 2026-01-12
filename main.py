@@ -5,7 +5,7 @@ import numpy as np
 import warp  as wp
 
 from generatePrimaryRays import generatePrimaryRays
-from intersections       import intersectRays
+from intersections       import intersectRays, propagateRays
 
 from rasterizer import rasterize
 
@@ -29,7 +29,35 @@ if __name__ == "__main__":
     lightSourcesBuffer = wp.array([lightSource], dtype=LightSource)
 
     # 0.(ii) Scene primitives initialisation
-    primitivesBuffer = wp.array([], dtype=Primitive)
+    segment0 = Primitive()
+    segment0.type = 0
+    segment0.p0 = wp.vec2(-0.75, -0.25)
+    segment0.p1 = wp.vec2(-0.75,  0.25)
+    segment0.ni = 1.0
+    segment0.no = 1.6
+
+    segment1 = Primitive()
+    segment1.type = 0
+    segment1.p0 = wp.vec2(-0.75,  0.25)
+    segment1.p1 = wp.vec2(-0.50,  0.25)
+    segment1.ni = 1.6
+    segment1.no = 1.0
+
+    segment2 = Primitive()
+    segment2.type = 0
+    segment2.p0 = wp.vec2(-0.50, -0.25)
+    segment2.p1 = wp.vec2(-0.50,  0.25)
+    segment2.ni = 1.0
+    segment2.no = 1.6
+
+    segment3 = Primitive()
+    segment3.type = 0
+    segment3.p0 = wp.vec2(-0.50, -0.25)
+    segment3.p1 = wp.vec2(-0.75, -0.25)
+    segment3.ni = 1.6
+    segment3.no = 1.0
+
+    primitivesBuffer = wp.array([segment0, segment1, segment2, segment3], dtype=Primitive)
     nbPrimitives = primitivesBuffer.shape[0]
 
     # Initialising image buffer
@@ -59,7 +87,7 @@ if __name__ == "__main__":
         # light source rays and everytime checks intersection,
         # then rasterize and accumulate, checks dead rays, and
         # continue or close the loop
-        longestRayDepth = 0
+        longestRayDepth = 5
         breakRun = False # To break outer loop if is required.
         while True:
             # II. Checking ray-scene intersections
@@ -120,8 +148,7 @@ if __name__ == "__main__":
                 dim     = nbParallelRays,
                 inputs  = [raysBuffer, intersectionsBuffer],
                 outputs = [raysBuffer]
-            )
-            """
+            )"""
 
             longestRayDepth += 1
 
