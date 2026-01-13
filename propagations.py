@@ -61,14 +61,22 @@ def propagateThroughIdealLens(
 
     return result
     
-
 @wp.func
 def fresnelReflection(
     direction: wp.vec2, normal: wp.vec2, 
     ni: wp.float32    , no: wp.float32
-) -> wp.vec2:
+) -> wp.float32:
 
-    thetaI = wp.acos(wp.dot(-direction, normal))
+    # For computation, normal and direction should have same orientation
+    flip = wp.sign(wp.dot(wp.normalize(direction), wp.normalize(normal)))
+    
+    if flip == -1.:
+        normal *= -1.
+        nTemp   = ni
+        ni      = no
+        no      = nTemp
+
+    thetaI = wp.acos(wp.dot(wp.normalize(direction), wp.normalize(normal)))
     thetaT = wp.asin(ni / no * wp.sin(thetaI))
 
     rs = (ni * wp.cos(thetaI) - no * wp.cos(thetaT)) / (ni * wp.cos(thetaI) + no * wp.cos(thetaT))
@@ -81,6 +89,13 @@ def fresnelReflection(
 
 @wp.func
 def reflect(origin: wp.vec2, normal: wp.vec2) -> wp.vec2:
+    # Normalizing
+    origin = wp.normalize(origin)
+    normal = wp.normalize(normal)
+
+    # Normal and direction should have same orientation
+    normal *= wp.sign(wp.dot(origin, normal))
+
     return origin - 2. * wp.dot(origin, normal) * normal
 
 @wp.func
@@ -88,11 +103,26 @@ def refract(
     direction: wp.vec2, normal: wp.vec2, 
     ni: wp.float32    , no: wp.float32
 ) -> wp.vec2:
+    
+    # Normalizing
+    direction = wp.normalize(direction)
+    normal    = wp.normalize(normal)
 
-    thetaI = wp.acos(wp.dot(-direction, normal))
+    # For computation, normal and direction should have same orientation
+    flip = wp.sign(wp.dot(direction, normal))
+    
+    if flip == -1.:
+        normal *= -1.
+        nTemp   = ni
+        ni      = no
+        no      = nTemp
+
+    thetaI = wp.acos(wp.dot(direction, normal))
     thetaT = wp.asin(ni / no * wp.sin(thetaI))
 
-    outputDirection = wp.cos(thetaT) * (-normal) + wp.sin(thetaT) * wp.vec2(-normal.y, normal.x)
+    tangent = wp.normalize(direction - wp.dot(direction, normal) * normal)
+
+    outputDirection = wp.cos(thetaT) * normal + wp.sin(thetaT) * tangent
     return wp.normalize(outputDirection)
 
 @wp.kernel
@@ -115,16 +145,15 @@ def propagateRays(
         
         if primitive.type == 0: # Ideal lens
             ray.direction = propagateThroughIdealLens(ray.origin, ray.direction, primitive.v0, primitive.v1, primitive.f0)
-        """
-        # Compute Fresnel reflection coefficient
-        R = fresnelReflection(ray.direction, intersection.normal, intersection.ni, intersection.no)
-        if rand < R:
-            # Reflection
-            ray.direction = reflect(ray.direction, intersection.normal)
-        else:
-            # Refraction
-            ray.direction = refract(ray.direction, intersection.normal, intersection.ni, intersection.no)
-        """
+        if primitive.type == 1: # Straight line interface
+            # Compute Fresnel reflection coefficient
+            R = fresnelReflection(ray.direction, intersection.normal, primitive.f0, primitive.f1)
+            if rand < R:
+                # Reflection
+                ray.direction = reflect(ray.direction, intersection.normal)
+            else:
+                # Refraction
+                ray.direction = refract(ray.direction, intersection.normal, primitive.f0, primitive.f1)
 
         ray.origin = intersection.hitPoint + 1.e-5 * ray.direction
         ray.depth += 1

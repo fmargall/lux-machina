@@ -67,10 +67,10 @@ def intersectRays(
         tempIntersection = Intersection()
         tempIntersection.hit = False
 
-        if   primitive.type == 0: # Ideal lens
+        if   primitive.type == 0: # Ideal lens (ie. segment)
             tempIntersection = intersectRayWithSegment(ray, primitive)
-        elif primitive.type == 1: # Segment
-            pass # tempIntersection = intersectRayWithSegment(ray, primitive)
+        elif primitive.type == 1: # Straight line interface (ie. segment)
+            tempIntersection = intersectRayWithSegment(ray, primitive)
         else:
             continue
 

@@ -27,8 +27,13 @@ def worldCoordinatesToScreenCoordinates(
 
     # Transforming light sources
     for lightSource in lightSourcesList:
-        lightSource.v0 = (lightSource.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
-        lightSource.v1 = (lightSource.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        if   lightSource.type == 0: # Point light source
+            lightSource.v0 = (lightSource.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        elif lightSource.type == 1: # Lambertian source
+            lightSource.v0 = (lightSource.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+            lightSource.v1 = (lightSource.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        else:
+            raise ValueError(f"Unknown lightsource type: {lightSource.type} in scene coordinates conversion.")
 
     # Transforming primitives
     for primitive in primitivesList:
@@ -36,6 +41,12 @@ def worldCoordinatesToScreenCoordinates(
             primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
             primitive.v1 = (primitive.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
             primitive.f0 = primitive.f0 / pixelSizeInWorldUnits # Focal length
+        elif primitive.type == 1: # Segment
+            primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+            primitive.v1 = (primitive.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        else:
+            raise ValueError(f"Unknown primitive type: {primitive.type} in scene coordinates conversion.")
+
 
     return (wp.array(lightSourcesList, dtype=LightSource, ndim=1),
             wp.array(primitivesList  , dtype=Primitive  , ndim=1))
@@ -45,9 +56,9 @@ if __name__ == "__main__":
     wp.init()
 
     # 0. Light tracer parameters
-    width, height   = 720, 360
+    width, height   = 720, 720
     nbParallelRays  = 10_000
-    maximumRayDepth = 1
+    maximumRayDepth = 5
     
     # 0.(i) Light sources initialisation
     lightSourceLED = LightSource()
@@ -60,10 +71,44 @@ if __name__ == "__main__":
     # 0.(ii) Scene primitives initialisation
     primitivesList = []
 
+    # Thin film
+    thinFilm00 = Primitive()
+    thinFilm00.type = 1
+    thinFilm00.v0 = wp.vec2( 0.003,  0.003)
+    thinFilm00.v1 = wp.vec2( 0.003, -0.003)
+    thinFilm00.f0 = wp.float32(1.)
+    thinFilm00.f1 = wp.float32(1.6)
+
+    thinFilm01 = Primitive()
+    thinFilm01.type = 1
+    thinFilm01.v0 = wp.vec2( 0.003,  0.003)
+    thinFilm01.v1 = wp.vec2( 0.003606,  0.003)
+    thinFilm01.f0 = wp.float32(1.6)
+    thinFilm01.f1 = wp.float32(1.)
+
+    thinFilm10 = Primitive()
+    thinFilm10.type = 1
+    thinFilm10.v0 = wp.vec2( 0.003, -0.003)
+    thinFilm10.v1 = wp.vec2( 0.003606, -0.003)
+    thinFilm10.f0 = wp.float32(1.)
+    thinFilm10.f1 = wp.float32(1.6)
+
+    thinFilm11 = Primitive()
+    thinFilm11.type = 1
+    thinFilm11.v0 = wp.vec2( 0.003606,  0.003)
+    thinFilm11.v1 = wp.vec2( 0.003606, -0.003)
+    thinFilm11.f0 = wp.float32(1.6)
+    thinFilm11.f1 = wp.float32(1.)
+
+    primitivesList.append(thinFilm00)
+    primitivesList.append(thinFilm01)
+    primitivesList.append(thinFilm10)
+    primitivesList.append(thinFilm11)
+
     idealLens = Primitive()
     idealLens.type = 0
-    idealLens.v0 = wp.vec2( 0.003,  0.003)
-    idealLens.v1 = wp.vec2( 0.003, -0.003)
+    idealLens.v0 = wp.vec2( 0.005,  0.003)
+    idealLens.v1 = wp.vec2( 0.005, -0.003)
     idealLens.f0 = wp.float32(0.003)
     
     primitivesList.append(idealLens)
