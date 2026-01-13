@@ -10,8 +10,7 @@ def segmentize(
     ray         : Ray,
     intersection: Intersection
 ) -> Segment:
-    #return Segment(ray.origin, intersection.hitPoint, ray.weight)
-    return Segment(ray.origin, ray.origin + 1000. * ray.direction, ray.weight)
+    return Segment(ray.origin, intersection.hitPoint, ray.energy)
 
 @wp.func
 def ccw(a: wp.vec2, b: wp.vec2, c: wp.vec2) -> wp.float32: 
@@ -19,8 +18,8 @@ def ccw(a: wp.vec2, b: wp.vec2, c: wp.vec2) -> wp.float32:
 
 @wp.func
 def doSegmentsIntersect(segment0: Segment, segment1: Segment) -> wp.bool:
-    return (ccw(segment0.s0, segment0.s1, segment1.s0) * ccw(segment0.s0, segment0.s1, segment1.s1) <= 0.0 and
-            ccw(segment1.s0, segment1.s1, segment0.s0) * ccw(segment1.s0, segment1.s1, segment0.s1) <= 0.0)
+    return (ccw(segment0.v0, segment0.v1, segment1.v0) * ccw(segment0.v0, segment0.v1, segment1.v1) <= 0.0 and
+            ccw(segment1.v0, segment1.v1, segment0.v0) * ccw(segment1.v0, segment1.v1, segment0.v1) <= 0.0)
 
 """
    We are here already working in screen coordinates;
@@ -78,33 +77,4 @@ def rasterize(
         if doSegmentsIntersect(segment, Segment(p01, p00, 1.)): hit = True
 
         if hit:
-            wp.atomic_add(imageBuffer, i, j, segment.weight)
-
-    """
-    # Image buffer is [-1, 1] in both axis in screen space
-    dx = wp.vec2(2. / wp.float32(imageBufferWidth),  0.)
-    dy = wp.vec2(0., 2. / wp.float32(imageBufferHeight))
-
-    # Pixel (0,0) is at top-left corner of the screen)
-    pixelCenter = wp.vec2(
-        -1.0 + (wp.float32(i) + 0.5) * dx.x,
-         1.0 - (wp.float32(j) + 0.5) * dy.y
-    )
-
-    p00 = pixelCenter - 0.5 * dx - 0.5 * dy
-    p10 = pixelCenter + 0.5 * dx - 0.5 * dy
-    p01 = pixelCenter - 0.5 * dx + 0.5 * dy
-    p11 = pixelCenter + 0.5 * dx + 0.5 * dy
-
-    for ID in range(nbParallelRays):
-        segment = segmentize(raysBuffer[ID], intersectionsBuffer[ID])
-        hit = False
-
-        if doSegmentsIntersect(segment, Segment(p00, p10, 1.)): hit = True
-        if doSegmentsIntersect(segment, Segment(p10, p11, 1.)): hit = True
-        if doSegmentsIntersect(segment, Segment(p11, p01, 1.)): hit = True
-        if doSegmentsIntersect(segment, Segment(p01, p00, 1.)): hit = True
-
-        if hit:
-            wp.atomic_add(imageBuffer, i, j, segment.weight)
-    """
+            wp.atomic_add(imageBuffer, i, j, segment.f0)

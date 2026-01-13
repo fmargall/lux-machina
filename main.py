@@ -6,6 +6,7 @@ import warp  as wp
 
 from generatePrimaryRays import generatePrimaryRays
 from intersections       import intersectRays
+from propagations        import propagateRays
 
 from rasterizer import rasterize
 
@@ -26,13 +27,15 @@ def worldCoordinatesToScreenCoordinates(
 
     # Transforming light sources
     for lightSource in lightSourcesList:
-        lightSource.p0 = (lightSource.p0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
-        lightSource.p1 = (lightSource.p1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        lightSource.v0 = (lightSource.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        lightSource.v1 = (lightSource.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
 
     # Transforming primitives
     for primitive in primitivesList:
-        primitive.p0 = (primitive.p0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
-        primitive.p1 = (primitive.p1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        if primitive.type == 0: # Ideal lens
+            primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+            primitive.v1 = (primitive.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+            primitive.f0 = primitive.f0 / pixelSizeInWorldUnits # Focal length
 
     return (wp.array(lightSourcesList, dtype=LightSource, ndim=1),
             wp.array(primitivesList  , dtype=Primitive  , ndim=1))
@@ -43,53 +46,27 @@ if __name__ == "__main__":
 
     # 0. Light tracer parameters
     width, height   = 720, 360
-    nbParallelRays  = 1
+    nbParallelRays  = 10_000
     maximumRayDepth = 1
     
     # 0.(i) Light sources initialisation
     lightSourceLED = LightSource()
-    lightSourceLED.type      = 1
-    lightSourceLED.intensity = 1.0
-    lightSourceLED.p0        = wp.vec2( 0.0,   0.0015)
-    lightSourceLED.p1        = wp.vec2( 0.0,  -0.0015)
+    lightSourceLED.type = 1
+    lightSourceLED.f0   = 1.0
+    lightSourceLED.v0   = wp.vec2( 0.0,   0.0015)
+    lightSourceLED.v1   = wp.vec2( 0.0,  -0.0015)
     lightSourcesList = [lightSourceLED]
     
     # 0.(ii) Scene primitives initialisation
     primitivesList = []
 
-    thinFilmIOR = 1.6
-    thinFilmSegment00 = Primitive()
-    thinFilmSegment00.type = 0
-    thinFilmSegment00.p0   = wp.vec2(0.003, -0.003)
-    thinFilmSegment00.p1   = wp.vec2(0.003,  0.003)
-    thinFilmSegment00.ni   = 1.0
-    thinFilmSegment00.no   = thinFilmIOR
-
-    thinFilmSegment01 = Primitive()
-    thinFilmSegment01.type = 0
-    thinFilmSegment01.p0   = wp.vec2(0.003 , 0.003)
-    thinFilmSegment01.p1   = wp.vec2(0.0035, 0.003)
-    thinFilmSegment01.ni   = 1.0
-    thinFilmSegment01.no   = thinFilmIOR
-
-    thinFilmSegment10 = Primitive()
-    thinFilmSegment10.type = 0
-    thinFilmSegment10.p0   = wp.vec2(0.003 , -0.003)
-    thinFilmSegment10.p1   = wp.vec2(0.0035, -0.003)
-    thinFilmSegment10.ni   = thinFilmIOR
-    thinFilmSegment10.no   = 1.0
-
-    thinFilmSegment11 = Primitive()
-    thinFilmSegment11.type = 0
-    thinFilmSegment11.p0   = wp.vec2(0.0035, -0.003)
-    thinFilmSegment11.p1   = wp.vec2(0.0035,  0.003)
-    thinFilmSegment11.ni   = thinFilmIOR
-    thinFilmSegment11.no   = 1.0
-
-    primitivesList.append(thinFilmSegment00)
-    primitivesList.append(thinFilmSegment01)
-    primitivesList.append(thinFilmSegment10)
-    primitivesList.append(thinFilmSegment11)
+    idealLens = Primitive()
+    idealLens.type = 0
+    idealLens.v0 = wp.vec2( 0.003,  0.003)
+    idealLens.v1 = wp.vec2( 0.003, -0.003)
+    idealLens.f0 = wp.float32(0.003)
+    
+    primitivesList.append(idealLens)
 
     nbPrimitives = len(primitivesList)
 
@@ -128,7 +105,7 @@ if __name__ == "__main__":
         # light source rays and everytime checks intersection,
         # then rasterize and accumulate, checks dead rays, and
         # continue or close the loop
-        longestRayDepth = 1
+        longestRayDepth = 0
         breakRun = False # To break outer loop if is required.
         while True:
             # II. Checking ray-scene intersections
@@ -142,15 +119,14 @@ if __name__ == "__main__":
                 outputs = [intersectionsBuffer, raysStatusBuffer]
             )
             
-            onlyDeadRays = not raysStatusBuffer.numpy()[0]
+            onlyDeadRays = np.sum(raysStatusBuffer.numpy()) == 0
 
             # III. Rasterizing and accumulating to image buffer
-            
             wp.launch(
                 kernel  = rasterize,
                 dim     = (height, width),
                 inputs  = [raysBuffer, intersectionsBuffer, nbParallelRays, 
-                           height, width],
+                            height, width],
                 outputs = [imageBuffer]
             )
             
@@ -166,8 +142,8 @@ if __name__ == "__main__":
 
             # Show everything on screen
             imgNorm = img / img.max()
-            #cv2.putText(imgNorm, f"RPS: {rps:.2f}"      , (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            #cv2.putText(imgNorm, f"Rays: {nbIterations}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(imgNorm, f"RPS: {rps:.2f}"      , (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(imgNorm, f"Rays: {nbIterations}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
             cv2.imshow("FiatLux!", imgNorm)
             
             # Check for quitting the application
@@ -183,14 +159,12 @@ if __name__ == "__main__":
                 break
 
             # V. Otherwise, we continue propagating the rays
-            """
             wp.launch(
                 kernel  = propagateRays,
                 dim     = nbParallelRays,
-                inputs  = [raysBuffer, intersectionsBuffer],
+                inputs  = [intersectionsBuffer, frameID],
                 outputs = [raysBuffer]
             )
-            """
 
             longestRayDepth += 1
 
