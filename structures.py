@@ -28,6 +28,16 @@ class Ray:
     - f2: wp.float32 (Angle of ending point)
     - f3: wp.float32 (refractive index in the +normal direction)
     - f4: wp.float32 (refractive index of the -normal direction)
+   3: Aspheric lens. Requires:
+    - f0: wp.float32 (Radius)
+    - f1: wp.float32 (Conic constant)
+    - f2: wp.float32 (refractive index in the +normal direction)
+    - f3: wp.float32 (refractive index in the -normal direction)
+    - f4: wp.float32 (1st coefficient, associated to  2nd power)
+    - f5: wp.float32 (2nd coefficient, associated to  4th power)
+    - f6: wp.float32 (3rd coefficient, associated to  6th power)
+    - f7: wp.float32 (4th coefficient, associated to  8th power)
+    - f8: wp.float32 (5th coefficient, associated to 10th power)
 """
 @wp.struct
 class Primitive:
