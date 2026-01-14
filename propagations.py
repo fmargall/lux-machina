@@ -143,17 +143,24 @@ def propagateRays(
     if ray.isAlive:
         primitive = intersection.primitive
         
-        if primitive.type == 0: # Ideal lens
+        if   primitive.type == 0: # Ideal lens
             ray.direction = propagateThroughIdealLens(ray.origin, ray.direction, primitive.v0, primitive.v1, primitive.f0)
-        if primitive.type == 1: # Straight line interface
+        elif primitive.type == 1: # Straight line interface
+            ni = primitive.f0
+            no = primitive.f1
+        elif primitive.type == 2: # Circular arc interface
+            ni = primitive.f3
+            no = primitive.f4
+
+        if (primitive.type == 1 or primitive.type == 2):
             # Compute Fresnel reflection coefficient
-            R = fresnelReflection(ray.direction, intersection.normal, primitive.f0, primitive.f1)
+            R = fresnelReflection(ray.direction, intersection.normal, ni, no)
             if rand < R:
                 # Reflection
                 ray.direction = reflect(ray.direction, intersection.normal)
             else:
                 # Refraction
-                ray.direction = refract(ray.direction, intersection.normal, primitive.f0, primitive.f1)
+                ray.direction = refract(ray.direction, intersection.normal, ni, no)
 
         ray.origin = intersection.hitPoint + 1.e-5 * ray.direction
         ray.depth += 1

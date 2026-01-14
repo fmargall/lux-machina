@@ -20,6 +20,13 @@ class Ray:
     - v1: wp.vec2 (End)    # (ie. +90° in trigonometric direction)
     - f0: wp.float32   (refractive index in the +normal direction)
     - f1: wp.float32   (refractive index in the -normal direction)
+   2: Circular arc. Requires:
+    - v0: wp.vec2    (Origin) # Center of circle
+    - f0: wp.float32 (Radius)
+    - f1: wp.float32 (Angle of starting point)
+    - f2: wp.float32 (Angle of ending point)
+    - f3: wp.float32 (refractive index in the +normal direction)
+    - f4: wp.float32 (refractive index of the -normal direction)
 """
 @wp.struct
 class Primitive:
@@ -28,6 +35,9 @@ class Primitive:
     v1  : wp.vec2
     f0  : wp.float32
     f1  : wp.float32
+    f2  : wp.float32
+    f3  : wp.float32
+    f4  : wp.float32
 
 @wp.struct
 class Segment:

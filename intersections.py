@@ -34,6 +34,68 @@ def intersectRayWithSegment(
 
     return intersection
 
+@wp.func
+def intersectRayWithCircularArc(
+    ray      : Ray,
+    primitive: Primitive
+) -> Intersection:
+    
+    center = primitive.v0
+    radius = primitive.f0
+    theta1 = primitive.f1
+    theta2 = primitive.f2
+
+    # Let's write and solve the equation
+    oc = ray.origin - center
+
+    # Computing the discriminant
+    a = wp.dot(ray.direction, ray.direction)
+    b = 2. * wp.dot(ray.direction, oc)
+    c = wp.dot(oc, oc) - radius * radius
+
+    discriminant = b * b - 4. * a * c
+
+    intersection = Intersection()
+    intersection.hit = False
+    if discriminant >= 0.:
+        t1 = - b - wp.sqrt(discriminant) / (2. * a)
+        t2 = - b + wp.sqrt(discriminant) / (2. * a)
+
+        # Let's try both solutions
+        smallestT = wp.float32(1.e15)
+        solutions = wp.vec2(t1, t2)
+        for tID in range(2):
+            t = solutions[tID]
+
+            # Cannot be before the ray origin
+            if t < 0.: continue
+
+            p   = ray.origin + t * ray.direction
+            pc  = p - center 
+            phi = wp.atan2(pc.y, pc.x)
+            if (phi < 0): phi += 6.28318530717958
+
+            hit = False
+            if (theta1 <= theta2):
+                hit = (phi >= theta1 and phi <= theta2)
+            else:
+                hit = (phi >= theta1 or  phi <= theta2)
+
+            # Saving the best configuration
+            if (hit and t < smallestT): smallestT = t
+
+        # One solution found
+        if smallestT < 1.e15:
+            ray.isAlive = True
+
+            intersection.hit = True
+            intersection.hitPoint  = ray.origin + smallestT * ray.direction
+            intersection.normal    = wp.normalize(intersection.hitPoint - center)
+            intersection.ray       = ray
+            intersection.primitive = primitive
+
+    return intersection
+
 @wp.kernel
 def intersectRays(
     raysBuffer      : wp.array(dtype=Ray, ndim=1),
@@ -71,6 +133,8 @@ def intersectRays(
             tempIntersection = intersectRayWithSegment(ray, primitive)
         elif primitive.type == 1: # Straight line interface (ie. segment)
             tempIntersection = intersectRayWithSegment(ray, primitive)
+        elif primitive.type == 2: # Circular arc interface
+            tempIntersection = intersectRayWithCircularArc(ray, primitive)
         else:
             continue
 
