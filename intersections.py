@@ -3,6 +3,40 @@ import warp as wp
 from structures import Intersection, Primitive, Ray
 
 @wp.func
+def asphericLensProfile(
+    x  : wp.float32,
+    R  : wp.float32, k  : wp.float32,
+    y0 : wp.float32, N  : wp.float32,
+    a2 : wp.float32, a4 : wp.float32, a6 : wp.float32, a8 : wp.float32, a10: wp.float32
+) -> wp.float32:
+    # Scaling correction over x
+    x *= N
+
+    # Computing original profile
+    num = wp.pow(x, 2.)
+    den = R * wp.sqrt(1. - (1. + k) * wp.pow(x / R, 2.))
+
+    coefs = a2 * wp.pow(x, 2.) +  a4 * wp.pow(x, 4.) + a6 * wp.pow(x, 6.) \
+          + a8 * wp.pow(x, 8.) + a10 * wp.pow(x, 10.) 
+
+    res = (num / den) + coefs
+
+    # Scaling correction over y
+    return (y0 - res) / N
+
+@wp.func
+def intersectRayWithAsphericLens(
+    ray: Ray,
+    primitive: Primitive
+) -> Intersection:
+    intersection = Intersection()
+    intersection.hit = False
+
+    # TO BE DONE
+
+    return intersection
+
+@wp.func
 def cross(a: wp.vec2, b: wp.vec2) -> wp.float32:
     return a.x * b.y - a.y * b.x
 
@@ -214,6 +248,8 @@ def intersectRays(
             tempIntersection = intersectRayWithSegment(ray, primitive)
         elif primitive.type ==  2: # Circular arc interface
             tempIntersection = intersectRayWithCircularArc(ray, primitive)
+        elif primitive.type ==  3: # Aspheric lens interface
+            tempIntersection = intersectRayWithAsphericLens(ray, primitive)
         else:
             continue
 

@@ -49,6 +49,9 @@ def worldCoordinatesToScreenCoordinates(
         elif primitive.type == 2:  # Circular arc
             primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
             primitive.f0 =  primitive.f0 / pixelSizeInWorldUnits # Radius
+        elif primitive.type == 3:  # Aspheric lens
+            primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+            primitive.v1 = (primitive.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
         else:
             raise ValueError(f"Unknown primitive type: {primitive.type} in scene coordinates conversion.")
 
