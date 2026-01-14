@@ -41,16 +41,16 @@ def doSegmentsIntersect(segment0: Segment, segment1: Segment) -> wp.bool:
 """
 @wp.kernel
 def rasterize(
-    raysBuffer         : wp.array(dtype=Ray, ndim=1),
     intersectionsBuffer: wp.array(dtype=Intersection, ndim=1),
     nbParallelRays     : wp.int32,
     
-    imageBufferHeight: wp.int32,
-    imageBufferWidth : wp.int32,
     imageBuffer      : wp.array(dtype=wp.float32, ndim=2)
 ):
     # Get pixel IDs
     i, j = wp.tid()
+
+    imageBufferHeight = imageBuffer.shape[0]
+    imageBufferWidth  = imageBuffer.shape[1]
 
     halfDeltaX = wp.float32(1.) / (2. * wp.float32(imageBufferWidth))
     halfDeltaY = wp.float32(1.) / (2. * wp.float32(imageBufferHeight))
@@ -68,7 +68,7 @@ def rasterize(
     p11 = pixelCenter + wp.vec2( halfDeltaX,  halfDeltaY);
 
     for ID in range(nbParallelRays):
-        segment = segmentize(raysBuffer[ID], intersectionsBuffer[ID])
+        segment = segmentize(intersectionsBuffer[ID].ray, intersectionsBuffer[ID])
         hit = False
 
         if doSegmentsIntersect(segment, Segment(p00, p10, 1.)): hit = True

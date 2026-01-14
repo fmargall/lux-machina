@@ -77,6 +77,12 @@ def fresnelReflection(
         no      = nTemp
 
     thetaI = wp.acos(wp.dot(wp.normalize(direction), wp.normalize(normal)))
+
+    # Check for a potential total internal reflection
+    sin2ThetaT = wp.pow(ni / no * wp.sin(thetaI), 2.)
+    if sin2ThetaT > 1.0:
+        return 1.0
+
     thetaT = wp.asin(ni / no * wp.sin(thetaI))
 
     rs = (ni * wp.cos(thetaI) - no * wp.cos(thetaT)) / (ni * wp.cos(thetaI) + no * wp.cos(thetaT))
@@ -118,6 +124,12 @@ def refract(
         no      = nTemp
 
     thetaI = wp.acos(wp.dot(direction, normal))
+    
+    # Check for a potential total internal reflection
+    sin2ThetaT = wp.pow(ni / no * wp.sin(thetaI), 2.)
+    if sin2ThetaT > 1.0:
+        return reflect(direction, normal)
+
     thetaT = wp.asin(ni / no * wp.sin(thetaI))
 
     tangent = wp.normalize(direction - wp.dot(direction, normal) * normal)
@@ -162,7 +174,7 @@ def propagateRays(
                 # Refraction
                 ray.direction = refract(ray.direction, intersection.normal, ni, no)
 
-        ray.origin = intersection.hitPoint + 1.e-5 * ray.direction
+        ray.origin = intersection.hitPoint + 1.e-6 * ray.direction
         ray.depth += 1
         raysBuffer[ID] = ray
     else:

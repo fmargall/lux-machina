@@ -37,16 +37,18 @@ def worldCoordinatesToScreenCoordinates(
 
     # Transforming primitives
     for primitive in primitivesList:
-        if primitive.type == 0: # Ideal lens
+        if   primitive.type == -1: # Bounding box
+            pass # No modification required
+        elif primitive.type == 0:  # Ideal lens
             primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
             primitive.v1 = (primitive.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
-            primitive.f0 = primitive.f0 / pixelSizeInWorldUnits # Focal length
-        elif primitive.type == 1: # Segment
+            primitive.f0 =  primitive.f0 / pixelSizeInWorldUnits # Focal length
+        elif primitive.type == 1:  # Segment
             primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
             primitive.v1 = (primitive.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
-        elif primitive.type == 2: # Circular arc
+        elif primitive.type == 2:  # Circular arc
             primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
-            primitive.f0 = primitive.f0 / pixelSizeInWorldUnits # Radius
+            primitive.f0 =  primitive.f0 / pixelSizeInWorldUnits # Radius
         else:
             raise ValueError(f"Unknown primitive type: {primitive.type} in scene coordinates conversion.")
 
@@ -60,8 +62,8 @@ if __name__ == "__main__":
 
     # 0. Light tracer parameters
     width, height   = 720, 720
-    nbParallelRays  = 100_000
-    maximumRayDepth = 0
+    nbParallelRays  = 10_000
+    maximumRayDepth = 10
     
     # 0.(i) Light sources initialisation
     lightSourceLED = LightSource()
@@ -74,17 +76,23 @@ if __name__ == "__main__":
     # 0.(ii) Scene primitives initialisation
     primitivesList = []
 
-    # Biconvex lens
-    biconvex00 = Primitive()
-    biconvex00.type = 2
-    biconvex00.v0   = wp.vec2(0.003, 0.0)
-    biconvex00.f0   = wp.float32(0.001)
-    biconvex00.f1   = wp.float32(0.001)
-    biconvex00.f2   = wp.float32(3.14159 - 0.001)
-    biconvex00.f3   = wp.float32(1.0)
-    biconvex00.f4   = wp.float32(1.51)
+    # Bounding box (to reveal all rays)
+    bbox = Primitive()
+    bbox.type = -1
 
-    primitivesList.append(biconvex00)
+    primitivesList.append(bbox)
+
+    # Biconvex lens
+    sphere = Primitive()
+    sphere.type = 2
+    sphere.v0   = wp.vec2(0.0015, 0.0)
+    sphere.f0   = wp.float32(0.0005)
+    sphere.f1   = wp.float32(0.)
+    sphere.f2   = wp.float32(7.)
+    sphere.f3   = wp.float32(1.5)
+    sphere.f4   = wp.float32(1.0)
+
+    primitivesList.append(sphere)
 
     # Thin film
     thinFilm00 = Primitive()
@@ -115,10 +123,10 @@ if __name__ == "__main__":
     thinFilm11.f0 = wp.float32(1.6)
     thinFilm11.f1 = wp.float32(1.)
 
-    #primitivesList.append(thinFilm00)
-    #primitivesList.append(thinFilm01)
-    #primitivesList.append(thinFilm10)
-    #primitivesList.append(thinFilm11)
+    primitivesList.append(thinFilm00)
+    primitivesList.append(thinFilm01)
+    primitivesList.append(thinFilm10)
+    primitivesList.append(thinFilm11)
 
     idealLens = Primitive()
     idealLens.type = 0
@@ -126,7 +134,7 @@ if __name__ == "__main__":
     idealLens.v1 = wp.vec2( 0.005, -0.003)
     idealLens.f0 = wp.float32(0.003)
     
-    #primitivesList.append(idealLens)
+    primitivesList.append(idealLens)
 
     nbPrimitives = len(primitivesList)
 
@@ -169,7 +177,7 @@ if __name__ == "__main__":
         breakRun = False # To break outer loop if is required.
         while True:
             # II. Checking ray-scene intersections
-            raysStatusBuffer    = wp.zeros(1, dtype=wp.bool)
+            raysStatusBuffer    = wp.zeros((nbParallelRays,), dtype=wp.bool)
             intersectionsBuffer = wp.zeros((nbParallelRays,), dtype=Intersection)
             
             wp.launch(
@@ -185,8 +193,7 @@ if __name__ == "__main__":
             wp.launch(
                 kernel  = rasterize,
                 dim     = (height, width),
-                inputs  = [raysBuffer, intersectionsBuffer, nbParallelRays, 
-                            height, width],
+                inputs  = [intersectionsBuffer, nbParallelRays],
                 outputs = [imageBuffer]
             )
             

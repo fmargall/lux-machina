@@ -11,6 +11,7 @@ class Ray:
 """
    Types:
    ------
+  -1: Bounding box. No requirements.
    0: Ideal lens. Requires:
     - v0: wp.vec2 (Point 1)
     - v1: wp.vec2 (Point 2)
