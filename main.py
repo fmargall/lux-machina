@@ -52,6 +52,9 @@ def worldCoordinatesToScreenCoordinates(
         elif primitive.type == 3:  # Aspheric lens
             primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
             primitive.v1 = (primitive.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        elif primitive.type == 4:  # Blocker
+            primitive.v0 = (primitive.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+            primitive.v1 = (primitive.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
         else:
             raise ValueError(f"Unknown primitive type: {primitive.type} in scene coordinates conversion.")
 
@@ -186,6 +189,14 @@ if __name__ == "__main__":
     primitivesList.append(asphericLens01)
     primitivesList.append(asphericLens10)
     primitivesList.append(asphericLens11)
+
+    # Blocker
+    blocker = Primitive()
+    blocker.type = 4
+    blocker.v0 = wp.vec2(0.004,  0.001)
+    blocker.v1 = wp.vec2(0.005, -0.001)
+
+    primitivesList.append(blocker)
 
     nbPrimitives = len(primitivesList)
 

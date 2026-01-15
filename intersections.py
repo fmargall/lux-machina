@@ -35,6 +35,16 @@ def intersectRayWithSegment(
     return intersection
 
 @wp.func
+def intersectRayWithBlocker(
+    ray      : Ray, 
+    primitive: Primitive
+) -> Intersection:
+    # Blocker is nothing else but a segment blocking light
+    intersection = intersectRayWithSegment(ray, primitive)
+    intersection.ray.isAlive = False
+    return intersection
+
+@wp.func
 def asphericLensProfile(
     x  : wp.float32,
     R  : wp.float32, k  : wp.float32,
@@ -189,9 +199,6 @@ def intersectRayWithAsphericLens(
         yDivide     = yUnit.y / yUnit.x
         denominator = xUnit.y - yDivide * xUnit.x
 
-    # --------------------------------
-    # yDivide -inf!
-
     xDelta = closestPoint.x - localAxisOrigin.x
     yDelta = closestPoint.y - localAxisOrigin.y
     if wp.abs(yUnit.x) < wp.abs(yUnit.x):
@@ -209,9 +216,6 @@ def intersectRayWithAsphericLens(
     else:
         xFarthest = (yDelta - yDivide   * xDelta ) / denominator
         yFarthest = (xDelta - xFarthest * xUnit.x) / yUnit.x
-
-    # --------------------------------
-    # xClosest, yClosest, xFarthest, yFarthest ALL NAN!
 
     xMin = wp.min(xClosest, xFarthest)
     xMax = wp.max(xClosest, xFarthest)
@@ -488,6 +492,8 @@ def intersectRays(
             tempIntersection = intersectRayWithCircularArc(ray, primitive)
         elif primitive.type ==  3: # Aspheric lens interface
             tempIntersection = intersectRayWithAsphericLens(ray, primitive)
+        elif primitive.type ==  4: # Blocker
+            tempIntersection = intersectRayWithBlocker(ray, primitive)
         else:
             continue
 

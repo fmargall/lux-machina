@@ -45,7 +45,6 @@ class Ray:
    4: Blocker. Requires:
     - v0: wp.vec2 (Point 1)
     - v1: wp.vec2 (Point 2)
-
 """
 @wp.struct
 class Primitive:
