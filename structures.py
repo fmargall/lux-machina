@@ -42,6 +42,10 @@ class Ray:
     - f8 : wp.float32 (3rd coefficient, associated to  6th power)
     - f9 : wp.float32 (4th coefficient, associated to  8th power)
     - f10: wp.float32 (5th coefficient, associated to 10th power)
+   4: Blocker. Requires:
+    - v0: wp.vec2 (Point 1)
+    - v1: wp.vec2 (Point 2)
+
 """
 @wp.struct
 class Primitive:
