@@ -53,6 +53,12 @@ class Primitive:
     f2  : wp.float32
     f3  : wp.float32
     f4  : wp.float32
+    f5  : wp.float32
+    f6  : wp.float32
+    f7  : wp.float32
+    f8  : wp.float32
+    f9  : wp.float32
+    f10 : wp.float32
 
 @wp.struct
 class Segment:

@@ -163,8 +163,11 @@ def propagateRays(
         elif primitive.type == 2: # Circular arc interface
             ni = primitive.f3
             no = primitive.f4
+        elif primitive.type == 3: # Aspheric lens interface
+            ni = primitive.f2
+            no = primitive.f3
 
-        if (primitive.type == 1 or primitive.type == 2):
+        if (primitive.type == 1 or primitive.type == 2 or primitive.type == 3):
             # Compute Fresnel reflection coefficient
             R = fresnelReflection(ray.direction, intersection.normal, ni, no)
             if rand < R:

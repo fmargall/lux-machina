@@ -3,40 +3,6 @@ import warp as wp
 from structures import Intersection, Primitive, Ray
 
 @wp.func
-def asphericLensProfile(
-    x  : wp.float32,
-    R  : wp.float32, k  : wp.float32,
-    y0 : wp.float32, N  : wp.float32,
-    a2 : wp.float32, a4 : wp.float32, a6 : wp.float32, a8 : wp.float32, a10: wp.float32
-) -> wp.float32:
-    # Scaling correction over x
-    x *= N
-
-    # Computing original profile
-    num = wp.pow(x, 2.)
-    den = R * wp.sqrt(1. - (1. + k) * wp.pow(x / R, 2.))
-
-    coefs = a2 * wp.pow(x, 2.) +  a4 * wp.pow(x, 4.) + a6 * wp.pow(x, 6.) \
-          + a8 * wp.pow(x, 8.) + a10 * wp.pow(x, 10.) 
-
-    res = (num / den) + coefs
-
-    # Scaling correction over y
-    return (y0 - res) / N
-
-@wp.func
-def intersectRayWithAsphericLens(
-    ray: Ray,
-    primitive: Primitive
-) -> Intersection:
-    intersection = Intersection()
-    intersection.hit = False
-
-    # TO BE DONE
-
-    return intersection
-
-@wp.func
 def cross(a: wp.vec2, b: wp.vec2) -> wp.float32:
     return a.x * b.y - a.y * b.x
 
@@ -65,6 +31,278 @@ def intersectRayWithSegment(
         intersection.primitive = primitive
     else:
         intersection.hit = False
+
+    return intersection
+
+@wp.func
+def asphericLensProfile(
+    x  : wp.float32,
+    R  : wp.float32, k  : wp.float32,
+    y0 : wp.float32, N  : wp.float32,
+    a2 : wp.float32, a4 : wp.float32, a6 : wp.float32, a8 : wp.float32, a10: wp.float32
+) -> wp.float32:
+    
+    # Scaling correction over x
+    x *= N
+
+    # Computing original profile
+    num = wp.pow(x, 2.)
+    den = R * (1. + wp.sqrt(1. - (1. + k) * wp.pow(x / R, 2.)))
+
+    coefs = a2 * wp.pow(x, 2.) +  a4 * wp.pow(x, 4.) + a6 * wp.pow(x, 6.) \
+          + a8 * wp.pow(x, 8.) + a10 * wp.pow(x, 10.) 
+
+    res = (num / den) + coefs
+
+    # Scaling correction over y
+    return (y0 - res) / N
+
+@wp.func
+def intersectRayWithAsphericLens(
+    ray: Ray,
+    primitive: Primitive
+) -> Intersection:
+    
+    # Obtaining the local axis: localAxisOrigin corresponds
+    # to the (0 ; 0) point in the lens profile referential,
+    # xUnit corresponds to (1, 0) vector, then yUnit stands
+    # for the (0, 1) vector.
+    localAxisOrigin = (primitive.v1 + primitive.v0) / 2.
+    # v0, in the lens profile referential, is
+    # (-1 ; 0) and v1 corresponds to (1 ; 0).
+    xUnit = (primitive.v1 - primitive.v0) / 2.
+    yUnit = wp.vec2(-xUnit.y, xUnit.x)
+
+    yIntercept = primitive.f4
+    normalizationFactor = primitive.f5
+    
+    # Obtaining the bounding box
+    lowerSegment = Primitive()
+    lowerSegment.type = 1
+    lowerSegment.v0   = primitive.v0
+    lowerSegment.v1   = primitive.v1
+
+    upperSegment = Primitive()
+    upperSegment.type = 1
+    upperSegment.v0   = primitive.v0 + yUnit * yIntercept / normalizationFactor
+    upperSegment.v1   = primitive.v1 + yUnit * yIntercept / normalizationFactor
+
+    leftSegment = Primitive()
+    leftSegment.type = 1
+    leftSegment.v0   = primitive.v0
+    leftSegment.v1   = primitive.v0 + yUnit * yIntercept / normalizationFactor
+
+    rightSegment = Primitive()
+    rightSegment.type = 1
+    rightSegment.v0   = primitive.v1
+    rightSegment.v1   = primitive.v1 + yUnit * yIntercept / normalizationFactor
+    
+    # Testing bounding box intersection
+    closestPoint     = wp.vec2(wp.inf, wp.inf)
+    closestDistance  = wp.float32(wp.inf)
+    farthestPoint    = wp.vec2(wp.inf, wp.inf)
+    farthestDistance = wp.float32(wp.inf) 
+    
+    lowerIntersection = intersectRayWithSegment(ray, lowerSegment)
+    
+    if lowerIntersection.hit:
+        distance = wp.norm_l2(lowerIntersection.hitPoint - ray.origin)
+        if distance < closestDistance:
+            farthestPoint    = closestPoint
+            farthestDistance = closestDistance
+            closestPoint     = lowerIntersection.hitPoint
+            closestDistance  = distance
+        elif distance < farthestDistance:
+            farthestPoint    = lowerIntersection.hitPoint
+            farthestDistance = distance
+
+    upperIntersection = intersectRayWithSegment(ray, upperSegment)
+    if upperIntersection.hit:
+        distance = wp.norm_l2(upperIntersection.hitPoint - ray.origin)
+        if distance < closestDistance:
+            farthestPoint    = closestPoint
+            farthestDistance = closestDistance
+            closestPoint     = upperIntersection.hitPoint
+            closestDistance  = distance
+        elif distance < farthestDistance:
+            farthestPoint    = upperIntersection.hitPoint
+            farthestDistance = distance
+
+    leftIntersection  = intersectRayWithSegment(ray, leftSegment)
+    if leftIntersection.hit:
+        distance = wp.norm_l2(leftIntersection.hitPoint - ray.origin)
+        if distance < closestDistance:
+            farthestPoint    = closestPoint
+            farthestDistance = closestDistance
+            closestPoint     = leftIntersection.hitPoint
+            closestDistance  = distance
+        elif distance < farthestDistance:
+            farthestPoint    = leftIntersection.hitPoint
+            farthestDistance = distance
+
+    rightIntersection = intersectRayWithSegment(ray, rightSegment)
+    if rightIntersection.hit:
+        distance = wp.norm_l2(rightIntersection.hitPoint - ray.origin)
+        if distance < closestDistance:
+            farthestPoint    = closestPoint
+            farthestDistance = closestDistance
+            closestPoint     = rightIntersection.hitPoint
+            closestDistance  = distance
+        elif distance < farthestDistance:
+            farthestPoint    = rightIntersection.hitPoint
+            farthestDistance = distance
+
+    # Ray did not intersect lens
+    if closestDistance == wp.inf:
+        intersection = Intersection()
+        intersection.hit = False
+
+        return intersection
+
+    # Only one intersection occured
+    # with the bounding box: origin
+    # or ray is already inside.
+    elif farthestDistance == wp.inf:
+        farthestPoint = closestPoint
+        closestPoint  = ray.origin
+
+    # We can now project these two points on the x-axis
+    # of the aspheric lens profile, going from -1 to 1.
+    # This means solving the following 2D system:
+    # x = x0 + xProj xX + yProj yX
+    # y = y0 + xProj xY + yProj yY
+    # We can then isolate xProj which is our unknown, either with
+    # one of the following method : choosing the one with highest
+    # denominator allows to avoid some numerical errors
+    # xProj = (x - x0 - (yX / yY) (y - y0)) / (xX - (yX / yY) xY)
+    #         (xDelta)  (yDivide) (yDelta)    (   denominator   )
+    # xProj = (y - y0 - (yY / yX) (x - x0)) / (xY - (yY / yX) xX)
+    #         (yDelta)  (yDivide) (xDelta)    (   denominator   )
+    # Following the same method, we will also need to
+    # have the projection of these two points for the
+    # linear regression of the ray.
+
+    if wp.abs(yUnit.x) < wp.abs(yUnit.x):
+        yDivide     = yUnit.x / yUnit.y
+        denominator = xUnit.x - yDivide * xUnit.y
+    else:
+        yDivide     = yUnit.y / yUnit.x
+        denominator = xUnit.y - yDivide * xUnit.x
+
+    # --------------------------------
+    # yDivide -inf!
+
+    xDelta = closestPoint.x - localAxisOrigin.x
+    yDelta = closestPoint.y - localAxisOrigin.y
+    if wp.abs(yUnit.x) < wp.abs(yUnit.x):
+        xClosest = (xDelta - yDivide  * yDelta ) / denominator
+        yClosest = (yDelta - xClosest * xUnit.y) / yUnit.y
+    else:
+        xClosest = (yDelta - yDivide  * xDelta ) / denominator
+        yClosest = (xDelta - xClosest * xUnit.x) / yUnit.x
+
+    xDelta = farthestPoint.x - localAxisOrigin.x
+    yDelta = farthestPoint.y - localAxisOrigin.y
+    if wp.abs(yUnit.x) < wp.abs(yUnit.x):
+        xFarthest = (xDelta - yDivide   * yDelta ) / denominator
+        yFarthest = (yDelta - xFarthest * xUnit.y) / yUnit.y
+    else:
+        xFarthest = (yDelta - yDivide   * xDelta ) / denominator
+        yFarthest = (xDelta - xFarthest * xUnit.x) / yUnit.x
+
+    # --------------------------------
+    # xClosest, yClosest, xFarthest, yFarthest ALL NAN!
+
+    xMin = wp.min(xClosest, xFarthest)
+    xMax = wp.max(xClosest, xFarthest)
+    if xMin == xClosest:
+        yMin = yClosest
+        yMax = yFarthest
+    else:
+        yMin = yFarthest
+        yMax = yClosest
+
+    # Ray can be then represented by linear regression
+    m = (yMax - yMin) / (xMax - xMin)
+    p =  yMax - m * xMax
+
+    # Before running the bisection methode, we need to
+    # be sure that there is indeed an intersection, if
+    # not the algorithm will return a fake hit.
+    rayAtMin = m * xMin + p
+    rayAtMax = m * xMax + p
+
+    profileAtMin = asphericLensProfile(xMin,
+        primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+        primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+    )
+    profileAtMax = asphericLensProfile(xMax,
+        primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+        primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+    )
+
+    # If there is no intersection, returning missed hit
+    diffMin = profileAtMin - rayAtMin
+    diffMax = profileAtMax - rayAtMax
+    if diffMin * diffMax > 0.0:
+        intersection = Intersection()
+        intersection.hit = False
+        return intersection
+    
+    # Intersection can be found using bisection method
+    epsilon = 1.e-10; maxIter = 64; it = wp.int32(0)
+    while (xMax - xMin) > epsilon and it < maxIter:
+        mean = (xMin + xMax) / 2.
+
+        # Let's compute the ray linear regression
+        linearRegxMin = m * xMin + p
+        linearRegMean = m * mean + p
+
+        # Let's compute the aspheric lens profile
+        asphericProfilexMin = asphericLensProfile(xMin,
+            primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+            primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+        )
+        asphericProfileMean = asphericLensProfile(mean,
+            primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+            primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+        )
+
+        # Let's compute the difference between the ray
+        # linear regression and aspheric lens profile.
+        diffxMin = asphericProfilexMin - linearRegxMin
+        diffMean = asphericProfileMean - linearRegMean
+
+        if (diffxMin * diffMean <= 0.):
+            xMax = mean
+        else:
+            xMin = mean
+
+        it += 1
+
+    # We now have the intersection of the ray and the profile
+    # We can compute its tangent, then its associated normal.
+    if mean > xMin:
+        tangent = wp.normalize(wp.vec2(mean - xMin, asphericProfileMean - asphericProfilexMin))
+    else:
+        tangent = wp.normalize(wp.vec2(xMin - mean, asphericProfilexMin - asphericProfileMean))
+    normal = wp.vec2(-tangent.y, tangent.x)
+
+    # We are still in the referential of the profile, we need
+    # to go back to the original referential before returning
+    #xUnit = wp.normalize(xUnit)
+    #yUnit = wp.normalize(yUnit)
+    hitPoint = localAxisOrigin + mean * xUnit + asphericProfileMean * yUnit
+    normal   = wp.normalize(normal.x * xUnit + normal.y * yUnit)
+
+    ray.isAlive = True
+
+    intersection = Intersection()
+    intersection.hit = True
+    intersection.hitPoint  = hitPoint
+    intersection.normal    = normal
+    intersection.ray       = ray
+    intersection.primitive = primitive
 
     return intersection
 

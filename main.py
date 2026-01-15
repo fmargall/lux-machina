@@ -64,7 +64,7 @@ if __name__ == "__main__":
     wp.init()
 
     # 0. Light tracer parameters
-    width, height   = 720, 720
+    width, height   = 512, 512
     nbParallelRays  = 10_000
     maximumRayDepth = 10
     
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     sphere.f3   = wp.float32(1.5)
     sphere.f4   = wp.float32(1.0)
 
-    primitivesList.append(sphere)
+    #primitivesList.append(sphere)
 
     # Thin film
     thinFilm00 = Primitive()
@@ -126,10 +126,12 @@ if __name__ == "__main__":
     thinFilm11.f0 = wp.float32(1.6)
     thinFilm11.f1 = wp.float32(1.)
 
-    primitivesList.append(thinFilm00)
-    primitivesList.append(thinFilm01)
-    primitivesList.append(thinFilm10)
-    primitivesList.append(thinFilm11)
+    #primitivesList.append(thinFilm00)
+    #primitivesList.append(thinFilm01)
+    #primitivesList.append(thinFilm10)
+    #primitivesList.append(thinFilm11)
+
+    # Ideal lens
 
     idealLens = Primitive()
     idealLens.type = 0
@@ -137,13 +139,59 @@ if __name__ == "__main__":
     idealLens.v1 = wp.vec2( 0.005, -0.003)
     idealLens.f0 = wp.float32(0.003)
     
-    primitivesList.append(idealLens)
+    #primitivesList.append(idealLens)
+
+    # Aspheric lens
+    
+    asphericLens00 = Primitive()
+    asphericLens00.type = 2
+    asphericLens00.v0   = wp.vec2(0.0038, 0.)
+    asphericLens00.f0   = wp.float32(0.00223607)
+    asphericLens00.f1   = wp.float32(2.678)
+    asphericLens00.f2   = wp.float32(3.605)
+    asphericLens00.f3   = wp.float32(1.51)
+    asphericLens00.f4   = wp.float32(1.)
+
+    asphericLens01 = Primitive()
+    asphericLens01.type = 1
+    asphericLens01.v0   = wp.vec2(0.0018, 0.001)
+    asphericLens01.v1   = wp.vec2(0.002, 0.001)
+    asphericLens01.f0   = wp.float32(1.51)
+    asphericLens01.f1   = wp.float32(1.)
+
+    asphericLens10 = Primitive()
+    asphericLens10.type = 1
+    asphericLens10.v0   = wp.vec2(0.0018, -0.001)
+    asphericLens10.v1   = wp.vec2(0.002, -0.001)
+    asphericLens10.f0   = wp.float32(1.)
+    asphericLens10.f1   = wp.float32(1.51)
+
+    asphericLens11 = Primitive()
+    asphericLens11.type = 3
+    asphericLens11.v0   = wp.vec2(0.002,  0.001)
+    asphericLens11.v1   = wp.vec2(0.002, -0.001)
+    asphericLens11.f0   = wp.float32( 8.818197)
+    asphericLens11.f1   = wp.float32(-0.9991715)
+    asphericLens11.f2   = wp.float32(1.51)
+    asphericLens11.f3   = wp.float32(1.0)
+    asphericLens11.f4   = wp.float32(11.6)
+    asphericLens11.f5   = wp.float32(12.96)
+    asphericLens11.f6   = wp.float32(0.)
+    asphericLens11.f7   = wp.float32(8.682167e-5)
+    asphericLens11.f8   = wp.float32(6.3760123e-8)
+    asphericLens11.f9   = wp.float32(2.4073084e-9)
+    asphericLens11.f10  = wp.float32(-1.7189021e-11)
+
+    primitivesList.append(asphericLens00)
+    primitivesList.append(asphericLens01)
+    primitivesList.append(asphericLens10)
+    primitivesList.append(asphericLens11)
 
     nbPrimitives = len(primitivesList)
 
     # 0.(iii) Converting to screen coordinates
-    bottomLeftCornerWorldCoordinates = wp.vec2(0.0, -.005)
-    pixelSizeInWorldUnits = wp.float32(0.01)
+    bottomLeftCornerWorldCoordinates = wp.vec2(0.0, -.0025)
+    pixelSizeInWorldUnits = wp.float32(0.005)
     lightSourcesBuffer, primitivesBuffer = worldCoordinatesToScreenCoordinates(
         lightSourcesList, primitivesList, 
         pixelSizeInWorldUnits, bottomLeftCornerWorldCoordinates
@@ -191,7 +239,7 @@ if __name__ == "__main__":
             )
             
             onlyDeadRays = np.sum(raysStatusBuffer.numpy()) == 0
-
+            
             # III. Rasterizing and accumulating to image buffer
             wp.launch(
                 kernel  = rasterize,
@@ -227,7 +275,7 @@ if __name__ == "__main__":
             # We can also break if we have reached max depth.
             if onlyDeadRays or (longestRayDepth >= maximumRayDepth):
                 break
-
+            
             # V. Otherwise, we continue propagating the rays
             wp.launch(
                 kernel  = propagateRays,
@@ -235,8 +283,10 @@ if __name__ == "__main__":
                 inputs  = [intersectionsBuffer, frameID],
                 outputs = [raysBuffer]
             )
-
+            
             longestRayDepth += 1
+
+        time.sleep(0.1)
 
         if breakRun: 
             break
