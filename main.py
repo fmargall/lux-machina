@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # 0. Light tracer parameters
     width, height   = 1080, 512
     nbParallelRays  = 10_000
-    maximumRayDepth = 100
+    maximumRayDepth = 10
     
     # 0.(i) Light sources initialisation
     lightSourceLED = LightSource()

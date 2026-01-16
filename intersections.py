@@ -283,19 +283,22 @@ def intersectRayWithAsphericLens(
             xMin = mean
 
         it += 1
-
+    
     # We now have the intersection of the ray and the profile
     # We can compute its tangent, then its associated normal.
-    if mean > xMin:
-        tangent = wp.normalize(wp.vec2(mean - xMin, asphericProfileMean - asphericProfilexMin))
+    if wp.abs(mean) < epsilon:
+        # Caution : close-to-zero value on x-axis profile
+        # may cause rounding errors and should be treated
+        asphericProfileMean = primitive.f4 / primitive.f5
     else:
-        tangent = wp.normalize(wp.vec2(xMin - mean, asphericProfilexMin - asphericProfileMean))
-    normal = wp.vec2(-tangent.y, tangent.x)
+        if mean > xMin:
+            tangent = wp.normalize(wp.vec2(mean - xMin, asphericProfileMean - asphericProfilexMin))
+        else:
+            tangent = wp.normalize(wp.vec2(xMin - mean, asphericProfilexMin - asphericProfileMean))
+        normal = wp.vec2(-tangent.y, tangent.x)
 
     # We are still in the referential of the profile, we need
     # to go back to the original referential before returning
-    #xUnit = wp.normalize(xUnit)
-    #yUnit = wp.normalize(yUnit)
     hitPoint = localAxisOrigin + mean * xUnit + asphericProfileMean * yUnit
     normal   = wp.normalize(normal.x * xUnit + normal.y * yUnit)
 
