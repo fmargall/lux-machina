@@ -68,6 +68,27 @@ def asphericLensProfile(
     return (y0 - res) / N
 
 @wp.func
+def asphericLensProfileNormal(
+    x  : wp.float32,
+    R  : wp.float32, k  : wp.float32,
+    y0 : wp.float32, N  : wp.float32,
+    a2 : wp.float32, a4 : wp.float32, a6 : wp.float32, a8 : wp.float32, a10: wp.float32    
+) -> wp.vec2:
+
+    # The normal can be obtained using the analytical derivative
+
+    u = N * x
+
+    derivative  = -       (u) / (R * wp.sqrt(1. - ((1. + k) * wp.pow(N * x, 2.)) / (R * R)))
+    derivative += -        u      *  2. * a2
+    derivative += - wp.pow(u, 3.) *  4. * a4
+    derivative += - wp.pow(u, 5.) *  6. * a6
+    derivative += - wp.pow(u, 7.) *  8. * a8
+    derivative += - wp.pow(u, 9.) * 10. * a10
+
+    return wp.normalize(wp.vec2(- derivative, 1.))
+
+@wp.func
 def intersectRayWithAsphericLens(
     ray: Ray,
     primitive: Primitive
@@ -284,19 +305,32 @@ def intersectRayWithAsphericLens(
 
         it += 1
     
+    """
     # We now have the intersection of the ray and the profile
     # We can compute its tangent, then its associated normal.
     if wp.abs(mean) < epsilon:
         # Caution : close-to-zero value on x-axis profile
         # may cause rounding errors and should be treated
         asphericProfileMean = primitive.f4 / primitive.f5
+        normal              = wp.vec2(0., 1.)
     else:
         if mean > xMin:
             tangent = wp.normalize(wp.vec2(mean - xMin, asphericProfileMean - asphericProfilexMin))
         else:
             tangent = wp.normalize(wp.vec2(xMin - mean, asphericProfilexMin - asphericProfileMean))
         normal = wp.vec2(-tangent.y, tangent.x)
-
+    """
+    if wp.abs(mean) < epsilon:
+        # Caution : close-to-zero value on x-axis profile
+        # may cause rounding errors and should be treated
+        asphericProfileMean = primitive.f4 / primitive.f5
+        normal              = wp.vec2(0., 1.)
+    else:
+        normal = asphericLensProfileNormal(mean,
+            primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+            primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+        )
+    
     # We are still in the referential of the profile, we need
     # to go back to the original referential before returning
     hitPoint = localAxisOrigin + mean * xUnit + asphericProfileMean * yUnit

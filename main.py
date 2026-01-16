@@ -67,9 +67,10 @@ if __name__ == "__main__":
     wp.init()
 
     # 0. Light tracer parameters
-    width, height   = 1080, 512
+    width, height   = 1024, 1024
     nbParallelRays  = 10_000
     maximumRayDepth = 10
+    timeSleep       = 0.
     
     # 0.(i) Light sources initialisation
     lightSourceLED = LightSource()
@@ -89,97 +90,41 @@ if __name__ == "__main__":
 
     primitivesList.append(bbox)
 
-    # Biconvex lens
-    sphere = Primitive()
-    sphere.type = 2
-    sphere.v0   = wp.vec2(0.0015, 0.0)
-    sphere.f0   = wp.float32(0.0005)
-    sphere.f1   = wp.float32(0.)
-    sphere.f2   = wp.float32(7.)
-    sphere.f3   = wp.float32(1.5)
-    sphere.f4   = wp.float32(1.0)
-
-    #primitivesList.append(sphere)
-
-    # Thin film
-    thinFilm00 = Primitive()
-    thinFilm00.type = 1
-    thinFilm00.v0 = wp.vec2( 0.003,  0.003)
-    thinFilm00.v1 = wp.vec2( 0.003, -0.003)
-    thinFilm00.f0 = wp.float32(1.)
-    thinFilm00.f1 = wp.float32(1.6)
-
-    thinFilm01 = Primitive()
-    thinFilm01.type = 1
-    thinFilm01.v0 = wp.vec2( 0.003,  0.003)
-    thinFilm01.v1 = wp.vec2( 0.003606,  0.003)
-    thinFilm01.f0 = wp.float32(1.6)
-    thinFilm01.f1 = wp.float32(1.)
-
-    thinFilm10 = Primitive()
-    thinFilm10.type = 1
-    thinFilm10.v0 = wp.vec2( 0.003, -0.003)
-    thinFilm10.v1 = wp.vec2( 0.003606, -0.003)
-    thinFilm10.f0 = wp.float32(1.)
-    thinFilm10.f1 = wp.float32(1.6)
-
-    thinFilm11 = Primitive()
-    thinFilm11.type = 1
-    thinFilm11.v0 = wp.vec2( 0.003606,  0.003)
-    thinFilm11.v1 = wp.vec2( 0.003606, -0.003)
-    thinFilm11.f0 = wp.float32(1.6)
-    thinFilm11.f1 = wp.float32(1.)
-
-    #primitivesList.append(thinFilm00)
-    #primitivesList.append(thinFilm01)
-    #primitivesList.append(thinFilm10)
-    #primitivesList.append(thinFilm11)
-
-    # Ideal lens
-
-    idealLens = Primitive()
-    idealLens.type = 0
-    idealLens.v0 = wp.vec2( 0.005,  0.003)
-    idealLens.v1 = wp.vec2( 0.005, -0.003)
-    idealLens.f0 = wp.float32(0.003)
-    
-    #primitivesList.append(idealLens)
-
     # Aspheric lens
     
     asphericLens00 = Primitive()
     asphericLens00.type = 2
-    asphericLens00.v0   = wp.vec2(0.0038, 0.)
-    asphericLens00.f0   = wp.float32(0.00223607)
-    asphericLens00.f1   = wp.float32(2.678)
-    asphericLens00.f2   = wp.float32(3.605)
-    asphericLens00.f3   = wp.float32(1.51)
-    asphericLens00.f4   = wp.float32(1.)
+    asphericLens00.v0   = wp.vec2(0.0718379, 0.)
+    asphericLens00.f0   = wp.float32(0.06999948)
+    asphericLens00.f1   = wp.float32(2.959153)
+    asphericLens00.f2   = wp.float32(3.324033)
+    asphericLens00.f3   = wp.float32(1.0)
+    asphericLens00.f4   = wp.float32(1.0)
 
     asphericLens01 = Primitive()
     asphericLens01.type = 1
-    asphericLens01.v0   = wp.vec2(0.0018, 0.001)
-    asphericLens01.v1   = wp.vec2(0.002, 0.001)
-    asphericLens01.f0   = wp.float32(1.51)
-    asphericLens01.f1   = wp.float32(1.)
+    asphericLens01.v0   = wp.vec2(0.0030, 0.01270)
+    asphericLens01.v1   = wp.vec2(0.0042, 0.01270)
+    asphericLens01.f0   = wp.float32(1.)
+    asphericLens01.f1   = wp.float32(1.51)
 
     asphericLens10 = Primitive()
     asphericLens10.type = 1
-    asphericLens10.v0   = wp.vec2(0.0018, -0.001)
-    asphericLens10.v1   = wp.vec2(0.002, -0.001)
-    asphericLens10.f0   = wp.float32(1.)
-    asphericLens10.f1   = wp.float32(1.51)
+    asphericLens10.v0   = wp.vec2(0.0030, -0.01270)
+    asphericLens10.v1   = wp.vec2(0.0042, -0.01270)
+    asphericLens10.f0   = wp.float32(1.51)
+    asphericLens10.f1   = wp.float32(1.)
 
     asphericLens11 = Primitive()
     asphericLens11.type = 3
-    asphericLens11.v0   = wp.vec2(0.002,  0.001)
-    asphericLens11.v1   = wp.vec2(0.002, -0.001)
+    asphericLens11.v0   = wp.vec2(0.0042,  0.01270)
+    asphericLens11.v1   = wp.vec2(0.0042, -0.01270)
     asphericLens11.f0   = wp.float32( 8.818197)
     asphericLens11.f1   = wp.float32(-0.9991715)
-    asphericLens11.f2   = wp.float32(1.51)
-    asphericLens11.f3   = wp.float32(1.0)
-    asphericLens11.f4   = wp.float32(11.6)
-    asphericLens11.f5   = wp.float32(12.96)
+    asphericLens11.f2   = wp.float32(1.)
+    asphericLens11.f3   = wp.float32(10.0)
+    asphericLens11.f4   = wp.float32(11.6383)
+    asphericLens11.f5   = wp.float32(12.8155)
     asphericLens11.f6   = wp.float32(0.)
     asphericLens11.f7   = wp.float32(8.682167e-5)
     asphericLens11.f8   = wp.float32(6.3760123e-8)
@@ -191,11 +136,49 @@ if __name__ == "__main__":
     #primitivesList.append(asphericLens10)
     primitivesList.append(asphericLens11)
 
+    # Biconvex lens
+    biconvex00 = Primitive()
+    biconvex00.type = 2
+    biconvex00.v0   = wp.vec2(0.0983741, 0.0)
+    biconvex00.f0   = wp.float32(0.0592)
+    biconvex00.f1   = wp.float32(2.698148)
+    biconvex00.f2   = wp.float32(3.585038)
+    biconvex00.f3   = wp.float32(1.0)
+    biconvex00.f4   = wp.float32(1.0)
+    
+    biconvex01 = Primitive()
+    biconvex01.type = 1
+    biconvex01.v0   = wp.vec2(0.04490, 0.02540)
+    biconvex01.v1   = wp.vec2(0.04790, 0.02540)
+    biconvex01.f0   = wp.float32(1.51)
+    biconvex01.f1   = wp.float32(1.)
+
+    biconvex10 = Primitive()
+    biconvex10.type = 1
+    biconvex10.v0   = wp.vec2(0.04490, -0.02540)
+    biconvex10.v1   = wp.vec2(0.04790, -0.02540)
+    biconvex10.f0   = wp.float32(1.)
+    biconvex10.f1   = wp.float32(1.51)
+    
+    biconvex11 = Primitive()
+    biconvex11.type = 2
+    biconvex11.v0   = wp.vec2(-0.0055741, 0.0)
+    biconvex11.f0   = wp.float32(0.0592)
+    biconvex11.f1   = wp.float32(5.839740)
+    biconvex11.f2   = wp.float32(0.443445)
+    biconvex11.f3   = wp.float32(1.51)
+    biconvex11.f4   = wp.float32(1.0)
+
+    #primitivesList.append(biconvex00)
+    #primitivesList.append(biconvex01)
+    #primitivesList.append(biconvex10)
+    #primitivesList.append(biconvex11)
+
     nbPrimitives = len(primitivesList)
 
     # 0.(iii) Converting to screen coordinates
-    bottomLeftCornerWorldCoordinates = wp.vec2(0.0, -.0025)
-    pixelSizeInWorldUnits = wp.float32(0.005)
+    bottomLeftCornerWorldCoordinates = wp.vec2(-0.001, -.0275)
+    pixelSizeInWorldUnits = wp.float32(0.055)
     lightSourcesBuffer, primitivesBuffer = worldCoordinatesToScreenCoordinates(
         lightSourcesList, primitivesList, 
         pixelSizeInWorldUnits, bottomLeftCornerWorldCoordinates
@@ -223,6 +206,8 @@ if __name__ == "__main__":
             inputs  = [frameID, lightSourcesBuffer],
             outputs = [raysBuffer]
         )
+
+        time.sleep(timeSleep)
         
         # The second while loop will run starting from initial
         # light source rays and everytime checks intersection,
@@ -290,7 +275,7 @@ if __name__ == "__main__":
             
             longestRayDepth += 1
 
-        time.sleep(0.1)
+            time.sleep(timeSleep)
 
         if breakRun: 
             break
