@@ -67,9 +67,9 @@ if __name__ == "__main__":
     wp.init()
 
     # 0. Light tracer parameters
-    width, height   = 512, 512
+    width, height   = 1080, 512
     nbParallelRays  = 10_000
-    maximumRayDepth = 10
+    maximumRayDepth = 100
     
     # 0.(i) Light sources initialisation
     lightSourceLED = LightSource()
@@ -85,6 +85,7 @@ if __name__ == "__main__":
     # Bounding box (to reveal all rays)
     bbox = Primitive()
     bbox.type = -1
+    bbox.f0   = width / height
 
     primitivesList.append(bbox)
 
@@ -185,18 +186,10 @@ if __name__ == "__main__":
     asphericLens11.f9   = wp.float32(2.4073084e-9)
     asphericLens11.f10  = wp.float32(-1.7189021e-11)
 
-    primitivesList.append(asphericLens00)
-    primitivesList.append(asphericLens01)
-    primitivesList.append(asphericLens10)
+    #primitivesList.append(asphericLens00)
+    #primitivesList.append(asphericLens01)
+    #primitivesList.append(asphericLens10)
     primitivesList.append(asphericLens11)
-
-    # Blocker
-    blocker = Primitive()
-    blocker.type = 4
-    blocker.v0 = wp.vec2(0.004,  0.001)
-    blocker.v1 = wp.vec2(0.005, -0.001)
-
-    primitivesList.append(blocker)
 
     nbPrimitives = len(primitivesList)
 

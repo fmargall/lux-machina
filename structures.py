@@ -11,7 +11,8 @@ class Ray:
 """
    Types:
    ------
-  -1: Bounding box. No requirements.
+  -1: Bounding box. Requires:
+    - f0: wp.float32 (Aspect ratio)
    0: Ideal lens. Requires:
     - v0: wp.vec2 (Point 1)
     - v1: wp.vec2 (Point 2)

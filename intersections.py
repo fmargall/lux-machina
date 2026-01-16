@@ -192,7 +192,7 @@ def intersectRayWithAsphericLens(
     # have the projection of these two points for the
     # linear regression of the ray.
 
-    if wp.abs(yUnit.x) < wp.abs(yUnit.x):
+    if wp.abs(yUnit.x) < wp.abs(yUnit.y):
         yDivide     = yUnit.x / yUnit.y
         denominator = xUnit.x - yDivide * xUnit.y
     else:
@@ -201,7 +201,7 @@ def intersectRayWithAsphericLens(
 
     xDelta = closestPoint.x - localAxisOrigin.x
     yDelta = closestPoint.y - localAxisOrigin.y
-    if wp.abs(yUnit.x) < wp.abs(yUnit.x):
+    if wp.abs(yUnit.x) < wp.abs(yUnit.y):
         xClosest = (xDelta - yDivide  * yDelta ) / denominator
         yClosest = (yDelta - xClosest * xUnit.y) / yUnit.y
     else:
@@ -210,7 +210,7 @@ def intersectRayWithAsphericLens(
 
     xDelta = farthestPoint.x - localAxisOrigin.x
     yDelta = farthestPoint.y - localAxisOrigin.y
-    if wp.abs(yUnit.x) < wp.abs(yUnit.x):
+    if wp.abs(yUnit.x) < wp.abs(yUnit.y):
         xFarthest = (xDelta - yDivide   * yDelta ) / denominator
         yFarthest = (yDelta - xFarthest * xUnit.y) / yUnit.y
     else:
@@ -317,13 +317,18 @@ def intersectRayWithAsphericLens(
 """
 @wp.func
 def intersectRayWithBoundingBox(
-    ray: Ray
+    ray      : Ray,
+    primitive: Primitive
 ) -> Intersection:
+
+    aspectRatio = primitive.f0
+
     # Test for the uppper border: (0 ; 1) - (1 ; 1)
+    # or for an aspectRatio != 1: (0 ; 1) - (aspectRatio ; 1)
     upperBorder = Primitive()
     upperBorder.type = 1
-    upperBorder.v0 = wp.vec2(0., 1.)
-    upperBorder.v1 = wp.vec2(1., 1.)
+    upperBorder.v0 = wp.vec2(0.         , 1.)
+    upperBorder.v1 = wp.vec2(aspectRatio, 1.)
     intersection = intersectRayWithSegment(ray, upperBorder)
     if intersection.hit:
         ray.isAlive = False # Touching bounding box kills ray
@@ -331,10 +336,11 @@ def intersectRayWithBoundingBox(
         return intersection
 
     # Test for the right  border: (1 ; 0) - (1 ; 1)
+    # or for an aspectRatio != 1: (aspectRatio ; 0) - (aspectRatio ; 1)
     rightBorder = Primitive()
     rightBorder.type = 1
-    rightBorder.v0 = wp.vec2(1., 0.)
-    rightBorder.v1 = wp.vec2(1., 1.)
+    rightBorder.v0 = wp.vec2(aspectRatio, 0.)
+    rightBorder.v1 = wp.vec2(aspectRatio, 1.)
     intersection = intersectRayWithSegment(ray, rightBorder)
     if intersection.hit:
         ray.isAlive = False # Touching bounding box kills ray
@@ -342,17 +348,18 @@ def intersectRayWithBoundingBox(
         return intersection
 
     # Test for the lower  border: (0 ; 0) - (1 ; 0)
+    # or for an aspectRatio != 1: (0 ; 0) - (aspectRatio ; 0)
     lowerBorder = Primitive()
     lowerBorder.type = 1
-    lowerBorder.v0 = wp.vec2(0., 0.)
-    lowerBorder.v1 = wp.vec2(1., 0.)
+    lowerBorder.v0 = wp.vec2(0.         , 0.)
+    lowerBorder.v1 = wp.vec2(aspectRatio, 0.)
     intersection = intersectRayWithSegment(ray, lowerBorder)
     if intersection.hit:
         ray.isAlive = False # Touching bounding box kills ray
         intersection.ray = ray
         return intersection
 
-    # Test for the left   border: (0 ; 0) - (0 ; 1)
+    # Test for the left   border: (0 ; 0) - (0 ; 1)    
     leftBorder = Primitive()
     leftBorder.type = 1
     leftBorder.v0 = wp.vec2(0., 0.)
@@ -483,7 +490,7 @@ def intersectRays(
         tempIntersection.hitPoint = wp.vec2(wp.inf, wp.inf) 
 
         if   primitive.type == -1: # Bounding box
-            tempIntersection = intersectRayWithBoundingBox(ray)
+            tempIntersection = intersectRayWithBoundingBox(ray, primitive)
         elif primitive.type ==  0: # Ideal lens (ie. segment)
             tempIntersection = intersectRayWithSegment(ray, primitive)
         elif primitive.type ==  1: # Straight line interface (ie. segment)

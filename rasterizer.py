@@ -52,13 +52,13 @@ def rasterize(
     imageBufferHeight = imageBuffer.shape[0]
     imageBufferWidth  = imageBuffer.shape[1]
 
-    halfDeltaX = wp.float32(1.) / (2. * wp.float32(imageBufferWidth))
+    halfDeltaX = wp.float32(1.) / (2. * wp.float32(imageBufferHeight))
     halfDeltaY = wp.float32(1.) / (2. * wp.float32(imageBufferHeight))
 
     # Careful: since i is the rowID and j colID,
     # i defines the position on y, then j on x.
     pixelCenter = wp.vec2(
-                            (wp.float32(j) / wp.float32(imageBufferWidth))  + halfDeltaX,
+                            (wp.float32(j) / wp.float32(imageBufferHeight))  + halfDeltaX,
         (wp.float32(imageBufferHeight - i) / wp.float32(imageBufferHeight)) + halfDeltaY
     )
 
