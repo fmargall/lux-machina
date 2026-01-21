@@ -96,3 +96,17 @@ class LightSource:
     v0  : wp.vec2
     v1  : wp.vec2
     f0  : wp.float32
+
+"""
+   Types:
+   0: Ideal sensor. Requires:
+    - v0: wp.vec2  (Origin)
+    - v1: wp.vec2  (End)
+    - i0: wp.int32 (Number of pixels)
+"""
+@wp.struct
+class Sensor:
+    type: wp.int32
+    v0  : wp.vec2
+    v1  : wp.vec2
+    i0  : wp.int32

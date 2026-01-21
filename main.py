@@ -1,23 +1,27 @@
 import time
 
 import cv2
-import numpy as np
-import warp  as wp
+import matplotlib.pyplot as plt
+import numpy             as np
+import warp              as wp
 
 from generatePrimaryRays import generatePrimaryRays
 from intersections       import intersectRays
 from propagations        import propagateRays
 
+from accumulateSensor import accumulateSensor
+
 from rasterizer import rasterize
 
-from structures import Intersection, LightSource, Primitive, Ray
+from structures import Intersection, LightSource, Primitive, Ray, Sensor
 
 """
    Converts world coordinates to screen coordinates.
 """
 def worldCoordinatesToScreenCoordinates(
     lightSourcesList,#: list[LightSource], # Type hint only valid in Python 3.9+
-    primitivesList  ,#: list[Primitive]  , # Type hint only valid in Python 3.9+
+    primitivesList  ,#: list[Primitive]  , # Type hint only valid in Python 3.9+,
+    sensorsList     ,#: list[Sensor]     , # Type hint only valid in Python 3.9+,
 
     pixelSizeInWorldUnits: wp.float32       ,
     bottomLeftCornerWorldCoordinates: wp.vec2
@@ -58,16 +62,22 @@ def worldCoordinatesToScreenCoordinates(
         else:
             raise ValueError(f"Unknown primitive type: {primitive.type} in scene coordinates conversion.")
 
+    # Transforming sensors
+    for sensorID, sensor in enumerate(sensorsList):
+        sensor.v0 = (sensor.v0 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        sensor.v1 = (sensor.v1 - bottomLeftCornerWorldCoordinates) / pixelSizeInWorldUnits
+        sensorsList[sensorID] = sensor
 
     return (wp.array(lightSourcesList, dtype=LightSource, ndim=1),
-            wp.array(primitivesList  , dtype=Primitive  , ndim=1))
+            wp.array(primitivesList  , dtype=Primitive  , ndim=1),
+            sensorsList)
 
 if __name__ == "__main__":
     # GPU support using NVIDIA Warp
     wp.init()
 
     # 0. Light tracer parameters
-    width, height   = 1024, 1024
+    width, height   = 512, 512
     nbParallelRays  = 10_000
     maximumRayDepth = 10
     timeSleep       = 0.
@@ -98,22 +108,22 @@ if __name__ == "__main__":
     asphericLens00.f0   = wp.float32(0.06999948)
     asphericLens00.f1   = wp.float32(2.959153)
     asphericLens00.f2   = wp.float32(3.324033)
-    asphericLens00.f3   = wp.float32(1.0)
-    asphericLens00.f4   = wp.float32(1.0)
+    asphericLens00.f3   = wp.float32(1.51)
+    asphericLens00.f4   = wp.float32(1.)
 
     asphericLens01 = Primitive()
     asphericLens01.type = 1
     asphericLens01.v0   = wp.vec2(0.0030, 0.01270)
     asphericLens01.v1   = wp.vec2(0.0042, 0.01270)
-    asphericLens01.f0   = wp.float32(1.)
-    asphericLens01.f1   = wp.float32(1.51)
+    asphericLens01.f0   = wp.float32(1.51)
+    asphericLens01.f1   = wp.float32(1.)
 
     asphericLens10 = Primitive()
     asphericLens10.type = 1
     asphericLens10.v0   = wp.vec2(0.0030, -0.01270)
     asphericLens10.v1   = wp.vec2(0.0042, -0.01270)
-    asphericLens10.f0   = wp.float32(1.51)
-    asphericLens10.f1   = wp.float32(1.)
+    asphericLens10.f0   = wp.float32(1.)
+    asphericLens10.f1   = wp.float32(1.51)
 
     asphericLens11 = Primitive()
     asphericLens11.type = 3
@@ -121,8 +131,8 @@ if __name__ == "__main__":
     asphericLens11.v1   = wp.vec2(0.0042, -0.01270)
     asphericLens11.f0   = wp.float32( 8.818197)
     asphericLens11.f1   = wp.float32(-0.9991715)
-    asphericLens11.f2   = wp.float32(1.)
-    asphericLens11.f3   = wp.float32(10.0)
+    asphericLens11.f2   = wp.float32(1.51)
+    asphericLens11.f3   = wp.float32(1.)
     asphericLens11.f4   = wp.float32(11.6383)
     asphericLens11.f5   = wp.float32(12.8155)
     asphericLens11.f6   = wp.float32(0.)
@@ -131,9 +141,9 @@ if __name__ == "__main__":
     asphericLens11.f9   = wp.float32(2.4073084e-9)
     asphericLens11.f10  = wp.float32(-1.7189021e-11)
 
-    #primitivesList.append(asphericLens00)
-    #primitivesList.append(asphericLens01)
-    #primitivesList.append(asphericLens10)
+    primitivesList.append(asphericLens00)
+    primitivesList.append(asphericLens01)
+    primitivesList.append(asphericLens10)
     primitivesList.append(asphericLens11)
 
     # Biconvex lens
@@ -143,7 +153,7 @@ if __name__ == "__main__":
     biconvex00.f0   = wp.float32(0.0592)
     biconvex00.f1   = wp.float32(2.698148)
     biconvex00.f2   = wp.float32(3.585038)
-    biconvex00.f3   = wp.float32(1.0)
+    biconvex00.f3   = wp.float32(1.51)
     biconvex00.f4   = wp.float32(1.0)
     
     biconvex01 = Primitive()
@@ -169,18 +179,49 @@ if __name__ == "__main__":
     biconvex11.f3   = wp.float32(1.51)
     biconvex11.f4   = wp.float32(1.0)
 
-    #primitivesList.append(biconvex00)
-    #primitivesList.append(biconvex01)
-    #primitivesList.append(biconvex10)
-    #primitivesList.append(biconvex11)
+    primitivesList.append(biconvex00)
+    primitivesList.append(biconvex01)
+    primitivesList.append(biconvex10)
+    primitivesList.append(biconvex11)
+
+    # Blockers
+    blocker00 = Primitive()
+    blocker00.type = 4
+    blocker00.v0   = wp.vec2()
+    blocker00.v1   = wp.vec2()
 
     nbPrimitives = len(primitivesList)
 
-    # 0.(iii) Converting to screen coordinates
-    bottomLeftCornerWorldCoordinates = wp.vec2(-0.001, -.0275)
+    # 0.(iii) Sensors initialization
+    sensorsList = []
+
+    sensor = Sensor()
+    sensor.v0 = wp.vec2(0.06,  0.03)
+    sensor.v1 = wp.vec2(0.06, -0.03)
+    sensor.i0 = 128
+
+    sensorsList.append(sensor)
+
+    sensorBuffer = wp.zeros((sensor.i0,), dtype=wp.float32)
+
+    # Initializing sensors buffer
+    sensorsBufferList = []
+    sensorsBufferList.append(sensorBuffer)
+
+    # Initializing sensors figure
+    fig, ax = plt.subplots()
+    line, = ax.plot([], [], lw=2)
+    ax.set_xlim(0, sensor.i0)
+    fig.canvas.draw()
+    background = fig.canvas.copy_from_bbox(ax.bbox)
+
+    nbSensors = len(sensorsList)
+
+    # 0.(iv) Converting to screen coordinates
+    bottomLeftCornerWorldCoordinates = wp.vec2(0.005, -.0275)
     pixelSizeInWorldUnits = wp.float32(0.055)
-    lightSourcesBuffer, primitivesBuffer = worldCoordinatesToScreenCoordinates(
-        lightSourcesList, primitivesList, 
+    lightSourcesBuffer, primitivesBuffer, sensorsList = worldCoordinatesToScreenCoordinates(
+        lightSourcesList, primitivesList, sensorsList,
         pixelSizeInWorldUnits, bottomLeftCornerWorldCoordinates
     )
 
@@ -228,7 +269,7 @@ if __name__ == "__main__":
             )
             
             onlyDeadRays = np.sum(raysStatusBuffer.numpy()) == 0
-            
+
             # III. Rasterizing and accumulating to image buffer
             wp.launch(
                 kernel  = rasterize,
@@ -240,7 +281,7 @@ if __name__ == "__main__":
             # III.(ii) Accumulating and normalizing the image buffer
             img = (img * (nbIterations - nbParallelRays) + imageBuffer.numpy()) / nbIterations
 
-            # III.(iii) Once accumulated, we can display the current imageq
+            # III.(iii) Once accumulated, we can display the current image
 
             # Computing current RPS
             currentTime = time.time()
@@ -259,6 +300,17 @@ if __name__ == "__main__":
             if cv2.waitKey(1) & 0xFF == ord('q'): 
                 breakRun = True
                 break
+
+            # III.(iv) Plot results for each sensor
+            for sensorID, sensor in enumerate(sensorsList):
+                sensorBuffer = sensorsBufferList[sensorID]
+
+                wp.launch(
+                    kernel  = accumulateSensor,
+                    dim     = sensor.i0,
+                    inputs  = [intersectionsBuffer, nbParallelRays, sensor],
+                    outputs = [sensorBuffer]
+                )
 
             # IV. If all rays are dead, we can break the loop
             # We can also break if we have reached max depth.

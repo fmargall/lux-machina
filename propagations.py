@@ -63,8 +63,8 @@ def propagateThroughIdealLens(
     
 @wp.func
 def fresnelReflection(
-    direction: wp.vec2, normal: wp.vec2, 
-    ni: wp.float32    , no: wp.float32
+    rayDirection: wp.vec2, interfaceNormal: wp.vec2, 
+    ni: wp.float32       , no: wp.float32
 ) -> wp.float32:
     """
     d = wp.normalize(direction)
@@ -93,23 +93,25 @@ def fresnelReflection(
 
     return 0.5 * (rs*rs + rp*rp)
     """
-    # For computation, normal and direction should have same orientation
-    flip = wp.sign(wp.dot(wp.normalize(direction), wp.normalize(normal)))
-    
-    if flip == -1.:
-        normal *= -1.
-        nTemp   = ni
-        ni      = no
-        no      = nTemp
+    # Normalizing 
+    rayDirection    = wp.normalize(rayDirection)
+    interfaceNormal = wp.normalize(interfaceNormal) 
 
-    thetaI = wp.acos(wp.dot(wp.normalize(direction), wp.normalize(normal)))
+    # If the ray comes from the outside of the primitive 
+    # the dot product will be negative. Then, we have to 
+    # flip the normal and the refracive indexes. 
+    if wp.dot(rayDirection, interfaceNormal) < 0.:
+        interfaceNormal = - interfaceNormal
+        ni, no = no, ni
+
+    thetaI = wp.acos(wp.dot(wp.normalize(rayDirection), wp.normalize(interfaceNormal)))
 
     # Check for a potential total internal reflection
-    sin2ThetaT = wp.pow(ni / no * wp.sin(thetaI), 2.)
-    if sin2ThetaT > 1.0:
-        return 1.0
+    sineTransmissionAngle = (ni / no) * wp.sin(thetaI) 
+    if wp.abs(sineTransmissionAngle) > wp.float32(1.0): 
+        return  wp.float32(1.0)
 
-    thetaT = wp.asin(ni / no * wp.sin(thetaI))
+    thetaT = wp.asin(sineTransmissionAngle)
 
     rs = (ni * wp.cos(thetaI) - no * wp.cos(thetaT)) / (ni * wp.cos(thetaI) + no * wp.cos(thetaT))
     rp = (ni * wp.cos(thetaT) - no * wp.cos(thetaI)) / (ni * wp.cos(thetaT) + no * wp.cos(thetaI))
@@ -131,36 +133,36 @@ def reflect(rayDirection: wp.vec2, interfaceNormal: wp.vec2) -> wp.vec2:
    By convention, interfaceNormal always points towards ni.
 """
 @wp.func
-def refract(
-    rayDirection: wp.vec2, interfaceNormal: wp.vec2, 
-    ni: wp.float32       , no: wp.float32
-) -> wp.vec2:
-    # Normalizing
+def refract(rayDirection: wp.vec2, interfaceNormal: wp.vec2, 
+            ni: wp.float32       , no: wp.float32
+) -> wp.vec2: 
+    # Normalizing 
     rayDirection    = wp.normalize(rayDirection)
-    interfaceNormal = wp.normalize(interfaceNormal)
-
-    # If the ray comes from the outside of the primitive
-    # the dot product will be negative. Then, we have to
-    # flip the normal and the refractive indexes.
-    cosIncidenceAngle = wp.dot(rayDirection, interfaceNormal)
-
-    if cosIncidenceAngle > 0.0:
-        interfaceNormal   = - interfaceNormal
-        cosIncidenceAngle = - cosIncidenceAngle
+    interfaceNormal = wp.normalize(interfaceNormal) 
+    
+    # If the ray comes from the outside of the primitive 
+    # the dot product will be negative. Then, we have to 
+    # flip the normal and the refracive indexes. 
+    if wp.dot(rayDirection, interfaceNormal) < 0.:
+        interfaceNormal = - interfaceNormal
         ni, no = no, ni
-
-    eta = ni / no
-    sineTransmissionAngleSquared = \
-        eta * eta * (1.0 - cosIncidenceAngle * cosIncidenceAngle)
-
-    if sineTransmissionAngleSquared > 1.0:
-        return reflect(rayDirection, interfaceNormal)
-
-    cosTransmissionAngleSquared = wp.sqrt(1.0 - sineTransmissionAngleSquared)
-    transmissionDirection = eta * rayDirection \
-        + (eta * cosIncidenceAngle - cosTransmissionAngleSquared) * interfaceNormal
-
-    return wp.normalize(transmissionDirection)
+        
+    incidentAngle = wp.acos(wp.dot(rayDirection, interfaceNormal))
+    
+    sineTransmissionAngle = (ni / no) * wp.sin(incidentAngle) 
+    # Check for a potential total internal reflection 
+    if wp.abs(sineTransmissionAngle) > wp.float32(1.0): 
+        return reflect(rayDirection, interfaceNormal) 
+        
+    # Tangent must follow the direction of the original ray direction: 
+    interfaceTangent = wp.vec2(-interfaceNormal.y, interfaceNormal.x)
+    interfaceTangent *= wp.sign(wp.dot(interfaceTangent, rayDirection))
+    
+    transmissionAngle = wp.asin(sineTransmissionAngle) 
+    refractedDirection = wp.cos(transmissionAngle) * interfaceNormal \
+        + wp.sin(transmissionAngle) * interfaceTangent 
+        
+    return wp.normalize(refractedDirection)
 
 @wp.kernel
 def propagateRays(
@@ -194,7 +196,7 @@ def propagateRays(
 
         if (primitive.type == 1 or primitive.type == 2 or primitive.type == 3):
             # Compute Fresnel reflection coefficient
-            R = 0.#fresnelReflection(ray.direction, intersection.normal, ni, no)
+            R = fresnelReflection(ray.direction, intersection.normal, ni, no)
             if rand < R:
                 # Reflection
                 ray.direction = reflect(ray.direction, intersection.normal)

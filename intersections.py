@@ -305,6 +305,9 @@ def intersectRayWithAsphericLens(
 
         it += 1
     
+    # DEPRECATED: This version was using numerical computation
+    #             for the normal direction. This may be reused
+    #             in the future for other primitives.
     """
     # We now have the intersection of the ray and the profile
     # We can compute its tangent, then its associated normal.
@@ -326,6 +329,7 @@ def intersectRayWithAsphericLens(
         asphericProfileMean = primitive.f4 / primitive.f5
         normal              = wp.vec2(0., 1.)
     else:
+        # Normal vector is computed analytically
         normal = asphericLensProfileNormal(mean,
             primitive.f0, primitive.f1, primitive.f4, primitive.f5,
             primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
