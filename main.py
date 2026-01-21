@@ -101,21 +101,21 @@ if __name__ == "__main__":
     primitivesList.append(bbox)
 
     # Aspheric lens
-    
+    nIOR = 1.51
     asphericLens00 = Primitive()
     asphericLens00.type = 2
     asphericLens00.v0   = wp.vec2(0.0718379, 0.)
     asphericLens00.f0   = wp.float32(0.06999948)
     asphericLens00.f1   = wp.float32(2.959153)
     asphericLens00.f2   = wp.float32(3.324033)
-    asphericLens00.f3   = wp.float32(1.51)
-    asphericLens00.f4   = wp.float32(1.)
+    asphericLens00.f3   = wp.float32(nIOR)
+    asphericLens00.f4   = wp.float32(1.0)
 
     asphericLens01 = Primitive()
     asphericLens01.type = 1
     asphericLens01.v0   = wp.vec2(0.0030, 0.01270)
     asphericLens01.v1   = wp.vec2(0.0042, 0.01270)
-    asphericLens01.f0   = wp.float32(1.51)
+    asphericLens01.f0   = wp.float32(nIOR)
     asphericLens01.f1   = wp.float32(1.)
 
     asphericLens10 = Primitive()
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     asphericLens10.v0   = wp.vec2(0.0030, -0.01270)
     asphericLens10.v1   = wp.vec2(0.0042, -0.01270)
     asphericLens10.f0   = wp.float32(1.)
-    asphericLens10.f1   = wp.float32(1.51)
+    asphericLens10.f1   = wp.float32(nIOR)
 
     asphericLens11 = Primitive()
     asphericLens11.type = 3
@@ -131,8 +131,8 @@ if __name__ == "__main__":
     asphericLens11.v1   = wp.vec2(0.0042, -0.01270)
     asphericLens11.f0   = wp.float32( 8.818197)
     asphericLens11.f1   = wp.float32(-0.9991715)
-    asphericLens11.f2   = wp.float32(1.51)
-    asphericLens11.f3   = wp.float32(1.)
+    asphericLens11.f2   = wp.float32(nIOR)
+    asphericLens11.f3   = wp.float32(1.0)
     asphericLens11.f4   = wp.float32(11.6383)
     asphericLens11.f5   = wp.float32(12.8155)
     asphericLens11.f6   = wp.float32(0.)
@@ -185,35 +185,60 @@ if __name__ == "__main__":
     primitivesList.append(biconvex11)
 
     # Blockers
-    blocker00 = Primitive()
-    blocker00.type = 4
-    blocker00.v0   = wp.vec2()
-    blocker00.v1   = wp.vec2()
+    blocker0 = Primitive()
+    blocker0.type = 4
+    blocker0.v0   = wp.vec2(0.04380, -0.02540)
+    blocker0.v1   = wp.vec2(0.04380, -0.02290)
+
+    blocker1 = Primitive()
+    blocker1.type = 4
+    blocker1.v0   = wp.vec2(0.04380,  0.02540)
+    blocker1.v1   = wp.vec2(0.04380,  0.02290)
+
+    blocker2 = Primitive()
+    blocker2.type = 4
+    blocker2.v0   = wp.vec2(0.04900, -0.02540)
+    blocker2.v1   = wp.vec2(0.04900, -0.02290)
+
+    blocker3 = Primitive()
+    blocker3.type = 4
+    blocker3.v0   = wp.vec2(0.04900,  0.02540)
+    blocker3.v1   = wp.vec2(0.04900,  0.02290)
+
+    primitivesList.append(blocker0)
+    primitivesList.append(blocker1)
+    primitivesList.append(blocker2)
+    primitivesList.append(blocker3)
 
     nbPrimitives = len(primitivesList)
 
     # 0.(iii) Sensors initialization
     sensorsList = []
 
-    sensor = Sensor()
-    sensor.v0 = wp.vec2(0.06,  0.03)
-    sensor.v1 = wp.vec2(0.06, -0.03)
-    sensor.i0 = 128
+    sensor0 = Sensor()
+    sensor0.v0 = wp.vec2(0.06,  0.03)
+    sensor0.v1 = wp.vec2(0.06, -0.03)
+    sensor0.i0 = 512
 
-    sensorsList.append(sensor)
+    sensorsList.append(sensor0)
 
-    sensorBuffer = wp.zeros((sensor.i0,), dtype=wp.float32)
+    sensor0Buffer = wp.zeros((sensor0.i0,), dtype=wp.float32)
+    sensor0Data  = sensor0Buffer.numpy()
 
     # Initializing sensors buffer
     sensorsBufferList = []
-    sensorsBufferList.append(sensorBuffer)
+    sensorsBufferList.append(sensor0Buffer)
+    sensorsDataList = []
+    sensorsDataList.append(sensor0Data)
 
     # Initializing sensors figure
     fig, ax = plt.subplots()
     line, = ax.plot([], [], lw=2)
-    ax.set_xlim(0, sensor.i0)
+    ax.set_xlim(0, sensor0.i0)
+    ax.set_ylim(0 ,1)
     fig.canvas.draw()
     background = fig.canvas.copy_from_bbox(ax.bbox)
+    plt.show(block=False)
 
     nbSensors = len(sensorsList)
 
@@ -304,6 +329,7 @@ if __name__ == "__main__":
             # III.(iv) Plot results for each sensor
             for sensorID, sensor in enumerate(sensorsList):
                 sensorBuffer = sensorsBufferList[sensorID]
+                sensorData = sensorsDataList[sensorID]
 
                 wp.launch(
                     kernel  = accumulateSensor,
@@ -311,6 +337,23 @@ if __name__ == "__main__":
                     inputs  = [intersectionsBuffer, nbParallelRays, sensor],
                     outputs = [sensorBuffer]
                 )
+
+                sensorData = (sensorData * (nbIterations - nbParallelRays) + sensorBuffer.numpy()) / nbIterations
+
+                sensorsDataList[sensorID] = sensorData
+
+                y = sensorData / np.max(sensorData)
+                x = np.arange(len(y))
+
+                fig.canvas.restore_region(background)
+
+                # update des données uniquement
+                line.set_data(x, y)
+
+                # redraw minimal
+                ax.draw_artist(line)
+                fig.canvas.blit(ax.bbox)
+                fig.canvas.flush_events()
 
             # IV. If all rays are dead, we can break the loop
             # We can also break if we have reached max depth.

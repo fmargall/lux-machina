@@ -66,33 +66,6 @@ def fresnelReflection(
     rayDirection: wp.vec2, interfaceNormal: wp.vec2, 
     ni: wp.float32       , no: wp.float32
 ) -> wp.float32:
-    """
-    d = wp.normalize(direction)
-    n = wp.normalize(normal)
-
-    cosI = wp.dot(d, n)
-
-    # Ray comes from the other side → flip normal and swap indices
-    if cosI > 0.0:
-        n = -n
-        ni, no = no, ni
-        cosI = -cosI
-
-    cosThetaI = -cosI
-    eta = ni / no
-    sin2ThetaT = eta*eta * (1.0 - cosThetaI*cosThetaI)
-
-    # Total internal reflection
-    if sin2ThetaT > 1.0:
-        return 1.0
-
-    cosThetaT = wp.sqrt(1.0 - sin2ThetaT)
-
-    rs = (ni * cosThetaI - no * cosThetaT) / (ni * cosThetaI + no * cosThetaT)
-    rp = (no * cosThetaI - ni * cosThetaT) / (no * cosThetaI + ni * cosThetaT)
-
-    return 0.5 * (rs*rs + rp*rp)
-    """
     # Normalizing 
     rayDirection    = wp.normalize(rayDirection)
     interfaceNormal = wp.normalize(interfaceNormal) 
@@ -104,7 +77,7 @@ def fresnelReflection(
         interfaceNormal = - interfaceNormal
         ni, no = no, ni
 
-    thetaI = wp.acos(wp.dot(wp.normalize(rayDirection), wp.normalize(interfaceNormal)))
+    thetaI = wp.acos(wp.dot(rayDirection, interfaceNormal))
 
     # Check for a potential total internal reflection
     sineTransmissionAngle = (ni / no) * wp.sin(thetaI) 
