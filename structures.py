@@ -103,6 +103,10 @@ class LightSource:
     - v0: wp.vec2  (Origin)
     - v1: wp.vec2  (End)
     - i0: wp.int32 (Number of pixels)
+   1: Ideal Shack-Hartmann sensor. Requires:
+    - v0: wp.vec2  (Origin)
+    - v1: wp.vec2  (End)
+    - i0: wp.int32 (Number of pixels)
 """
 @wp.struct
 class Sensor:

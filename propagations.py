@@ -177,7 +177,7 @@ def propagateRays(
                 # Refraction
                 ray.direction = refract(ray.direction, intersection.normal, ni, no)
 
-        ray.origin = intersection.hitPoint + 4.e-7 * ray.direction
+        ray.origin = intersection.hitPoint + 5.e-7 * ray.direction
         ray.depth += 1
         raysBuffer[ID] = ray
     else:

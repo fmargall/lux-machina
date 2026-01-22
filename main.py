@@ -9,11 +9,17 @@ from generatePrimaryRays import generatePrimaryRays
 from intersections       import intersectRays
 from propagations        import propagateRays
 
-from accumulateSensor import accumulateSensor
+from accumulateSensor import accumulateIdealSensor, accumulateShackHartmannIdealSensor
 
 from rasterizer import rasterize
 
 from structures import Intersection, LightSource, Primitive, Ray, Sensor
+
+"""
+   Circular mean with ponderation
+"""
+def circmean(oldWeight, oldAngle, newWeight, newAngle):
+    return np.angle(oldWeight * np.exp(1j * oldAngle) + newWeight * np.exp(1j * newAngle))
 
 """
    Converts world coordinates to screen coordinates.
@@ -98,7 +104,7 @@ if __name__ == "__main__":
     bbox.type = -1
     bbox.f0   = width / height
 
-    primitivesList.append(bbox)
+    #primitivesList.append(bbox)
 
     # Aspheric lens
     nIOR = 1.51
@@ -216,9 +222,10 @@ if __name__ == "__main__":
     sensorsList = []
 
     sensor0 = Sensor()
-    sensor0.v0 = wp.vec2(0.06,  0.03)
-    sensor0.v1 = wp.vec2(0.06, -0.03)
-    sensor0.i0 = 512
+    sensor0.type = 0
+    sensor0.v0   = wp.vec2(1.75,  0.465)
+    sensor0.v1   = wp.vec2(1.75, -0.465)
+    sensor0.i0   = 512
 
     sensorsList.append(sensor0)
 
@@ -328,32 +335,55 @@ if __name__ == "__main__":
 
             # III.(iv) Plot results for each sensor
             for sensorID, sensor in enumerate(sensorsList):
-                sensorBuffer = sensorsBufferList[sensorID]
-                sensorData = sensorsDataList[sensorID]
 
-                wp.launch(
-                    kernel  = accumulateSensor,
-                    dim     = sensor.i0,
-                    inputs  = [intersectionsBuffer, nbParallelRays, sensor],
-                    outputs = [sensorBuffer]
-                )
+                if (sensor.type == 0): # Ideal sensor
+                    sensorBuffer = sensorsBufferList[sensorID]
+                    sensorData = sensorsDataList[sensorID]
 
-                sensorData = (sensorData * (nbIterations - nbParallelRays) + sensorBuffer.numpy()) / nbIterations
+                    wp.launch(
+                        kernel  = accumulateIdealSensor,
+                        dim     = sensor.i0,
+                        inputs  = [intersectionsBuffer, nbParallelRays, sensor],
+                        outputs = [sensorBuffer]
+                    )
 
-                sensorsDataList[sensorID] = sensorData
+                    sensorData = (sensorData * (nbIterations - nbParallelRays) + sensorBuffer.numpy()) / nbIterations
 
-                y = sensorData / np.max(sensorData)
-                x = np.arange(len(y))
+                    sensorsDataList[sensorID] = sensorData
 
-                fig.canvas.restore_region(background)
+                    y = sensorData / np.max(sensorData)
+                    x = np.arange(len(y))
 
-                # update des données uniquement
-                line.set_data(x, y)
+                    fig.canvas.restore_region(background)
 
-                # redraw minimal
-                ax.draw_artist(line)
-                fig.canvas.blit(ax.bbox)
-                fig.canvas.flush_events()
+                    # update des données uniquement
+                    line.set_data(x, y)
+
+                    # redraw minimal
+                    ax.draw_artist(line)
+                    fig.canvas.blit(ax.bbox)
+                    fig.canvas.flush_events()
+                
+                elif (sensor.type == 1): # Shack-Hartmann sensor
+                    sensorCountBuffer = sensorsBufferList[sensorID][0]
+                    sensorAngleBuffer = sensorsBufferList[sensorID][1]
+
+                    sensorCountData = sensorsDataList[sensorID][0]
+                    sensorAngleData = sensorsDataList[sensorID][1]
+
+                    wp.launch(
+                        kernel  = accumulateShackHartmannIdealSensor,
+                        dim     = sensor.i0,
+                        inputs  = [intersectionsBuffer, nbParallelRays, sensor],
+                        outputs = [sensorCountBuffer, sensorAngleBuffer]
+                    )
+
+                    sensorCountData = (sensorCountData * (nbIterations - nbParallelRays) + sensorCountBuffer.numpy()) / nbIterations
+                    sensorAngleData = circmean((nbIterations - nbParallelRays) / nbIterations, sensorAngleData,
+                                                                            1. / nbIterations, sensorAngleBuffer.numpy())
+
+                    sensorsDataList[sensorID][0] = sensorCountData
+                    sensorsDataList[sensorID][1] = sensorAngleData
 
             # IV. If all rays are dead, we can break the loop
             # We can also break if we have reached max depth.

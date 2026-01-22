@@ -67,6 +67,10 @@ def asphericLensProfile(
     # Scaling correction over y
     return (y0 - res) / N
 
+"""
+   Analytical computation of the normal 
+   using the derivative of the profile.
+"""
 @wp.func
 def asphericLensProfileNormal(
     x  : wp.float32,
@@ -75,11 +79,9 @@ def asphericLensProfileNormal(
     a2 : wp.float32, a4 : wp.float32, a6 : wp.float32, a8 : wp.float32, a10: wp.float32    
 ) -> wp.vec2:
 
-    # The normal can be obtained using the analytical derivative
-
     u = N * x
 
-    derivative  = -       (u) / (R * wp.sqrt(1. - ((1. + k) * wp.pow(N * x, 2.)) / (R * R)))
+    derivative  = -       (u) / (R * wp.sqrt(1. - ((1. + k) * wp.pow(u, 2.)) / (R * R)))
     derivative += -        u      *  2. * a2
     derivative += - wp.pow(u, 3.) *  4. * a4
     derivative += - wp.pow(u, 5.) *  6. * a6
@@ -274,8 +276,14 @@ def intersectRayWithAsphericLens(
         intersection.hit = False
         return intersection
     
+    # Mean value should be initialized first. If not,
+    # a strange behaviour may appear after while loop
+    # maybe due to obscure Warp optimization when the
+    # kernel compilation is made.
+    mean = (xMin + xMax) / 2.
+
     # Intersection can be found using bisection method
-    epsilon = 1.e-10; maxIter = 64; it = wp.int32(0)
+    epsilon = 1.e-10; maxIter = 64; it = wp.int32(0.)
     while (xMax - xMin) > epsilon and it < maxIter:
         mean = (xMin + xMax) / 2.
 
@@ -304,6 +312,14 @@ def intersectRayWithAsphericLens(
             xMin = mean
 
         it += 1
+
+    # Ensure final profile value is computed from the final, well-defined mean
+    # The explanation for this can be found in the comment above associated to
+    # the initilization of the 'mean' variable before the loop
+    asphericProfileMean = asphericLensProfile(mean,
+        primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+        primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+    )
     
     # DEPRECATED: This version was using numerical computation
     #             for the normal direction. This may be reused
@@ -323,19 +339,14 @@ def intersectRayWithAsphericLens(
             tangent = wp.normalize(wp.vec2(xMin - mean, asphericProfilexMin - asphericProfileMean))
         normal = wp.vec2(-tangent.y, tangent.x)
     """
-    if wp.abs(mean) < epsilon:
-        # Caution : close-to-zero value on x-axis profile
-        # may cause rounding errors and should be treated
-        asphericProfileMean = primitive.f4 / primitive.f5
-        normal              = wp.vec2(0., 1.)
-    else:
-        # Normal vector is computed analytically
-        normal = asphericLensProfileNormal(mean,
-            primitive.f0, primitive.f1, primitive.f4, primitive.f5,
-            primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
-        )
     
-    # We are still in the referential of the profile, we need
+    # Normal vector is computed analytically
+    normal = asphericLensProfileNormal(mean,
+        primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+        primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+    )
+    
+    # We are still in the referential of the profile, we needq
     # to go back to the original referential before returning
     hitPoint = localAxisOrigin + mean * xUnit + asphericProfileMean * yUnit
     normal   = wp.normalize(normal.x * xUnit + normal.y * yUnit)
@@ -512,6 +523,7 @@ def intersectRays(
     # Initializing intersection
     intersection = Intersection()
     intersection.hit = False # No intersection
+    intersection.ray = ray
     intersection.hitPoint = wp.vec2(wp.inf, wp.inf) 
     intersectionsBuffer[ID] = intersection
 

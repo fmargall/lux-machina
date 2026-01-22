@@ -10,7 +10,11 @@ def segmentize(
     ray         : Ray,
     intersection: Intersection
 ) -> Segment:
-    return Segment(ray.origin, intersection.hitPoint, ray.energy)
+    if intersection.hit:
+        return Segment(ray.origin, intersection.hitPoint, ray.energy)
+    else:
+        farthestPoint = ray.origin + 1.e3 * ray.direction
+        return Segment(ray.origin, farthestPoint, ray.energy)
 
 @wp.func
 def ccw(a: wp.vec2, b: wp.vec2, c: wp.vec2) -> wp.float32: 
@@ -68,6 +72,9 @@ def rasterize(
     p11 = pixelCenter + wp.vec2( halfDeltaX,  halfDeltaY);
 
     for ID in range(nbParallelRays):
+        if not intersectionsBuffer[ID].hit:
+            continue
+
         segment = segmentize(intersectionsBuffer[ID].ray, intersectionsBuffer[ID])
         hit = False
 
