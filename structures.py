@@ -72,6 +72,36 @@ class Primitive:
     f9  : wp.float32
     f10 : wp.float32
 
+"""
+   Types:
+   ------
+   0: Annulus blocker. Requires:
+    - v0: wp.vec3    (Origin)
+    - v1: wp.vec3    (Normal)
+    - f0: wp.float32 (Inner radius)
+    - f1: wp.float32 (Outer radius)
+   1: Cylinder. Requires:
+    - v0: wp.vec3    (Center of basis)
+    - v1: wp.vec3    (Normal of basis with height as length)
+    - f0: wp.float32 (Radius)
+    - f1: wp.float32 (Refractive index in the +normal direction, ie. the outside)
+    - f2: wp.float32 (Refractive index in the -normal direction, ie. the inside)
+   2: Spherical cap. Requires:
+    - v0: wp.vec3    (Center of sphere)
+    - v1: wp.vec3    (Direction of spherical cap pole, with radius as length)
+    - f0: wp.float32 (Angle of the spherical cap: pi(/2) for an (hemi)sphere)
+    - f1: wp.float32 (Refractive index in the +normal direction, ie. the outside)
+    - f2: wp.float32 (Refractive index in the -normal direction, ie. the inside)
+"""
+@wp.struct
+class Primitive3D:
+    type: wp.int32
+    v0  : wp.vec3
+    v1  : wp.vec3
+    f0  : wp.float32
+    f1  : wp.float32
+    f2  : wp.float32
+
 @wp.struct
 class Segment:
     v0: wp.vec2
