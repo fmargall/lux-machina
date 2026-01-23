@@ -107,6 +107,11 @@ class LightSource:
     - v0: wp.vec2  (Origin)
     - v1: wp.vec2  (End)
     - i0: wp.int32 (Number of pixels)
+   2: Ideal plenoptic sensor. Requires:
+    - v0: wp.vec2  (Origin)
+    - v1: wp.vec2  (End)
+    - i0: wp.int32 (Number of spatial bins, or "pixels")
+    - i1: wp.int32 (Number of angular bins)
 """
 @wp.struct
 class Sensor:
@@ -114,3 +119,4 @@ class Sensor:
     v0  : wp.vec2
     v1  : wp.vec2
     i0  : wp.int32
+    i1  : wp.int32

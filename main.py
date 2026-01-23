@@ -9,7 +9,7 @@ from generatePrimaryRays import generatePrimaryRays
 from intersections       import intersectRays
 from propagations        import propagateRays
 
-from accumulateSensor import accumulateIdealSensor, accumulateShackHartmannIdealSensor
+from accumulateSensor import accumulateIdealSensor, accumulateIdealPlenopticSensor, accumulateIdealShackHartmannSensor
 
 from rasterizer import rasterize
 
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     bbox.type = -1
     bbox.f0   = width / height
 
-    #primitivesList.append(bbox)
+    primitivesList.append(bbox)
 
     # Aspheric lens
     nIOR = 1.51
@@ -223,14 +223,14 @@ if __name__ == "__main__":
 
     sensor0 = Sensor()
     sensor0.type = 0
-    sensor0.v0   = wp.vec2(1.75,  0.465)
-    sensor0.v1   = wp.vec2(1.75, -0.465)
+    sensor0.v0   = wp.vec2(0.06,  0.03)
+    sensor0.v1   = wp.vec2(0.06, -0.03)
     sensor0.i0   = 512
 
     sensorsList.append(sensor0)
 
     sensor0Buffer = wp.zeros((sensor0.i0,), dtype=wp.float32)
-    sensor0Data  = sensor0Buffer.numpy()
+    sensor0Data   = sensor0Buffer.numpy()
 
     # Initializing sensors buffer
     sensorsBufferList = []
@@ -242,10 +242,57 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()
     line, = ax.plot([], [], lw=2)
     ax.set_xlim(0, sensor0.i0)
-    ax.set_ylim(0 ,1)
+    ax.set_ylim(0, 1)
     fig.canvas.draw()
     background = fig.canvas.copy_from_bbox(ax.bbox)
     plt.show(block=False)
+
+    # Ideal plenoptic sensor
+    sensor1 = Sensor()
+    sensor1.type = 2
+    sensor1.v0   = wp.vec2(0.06,  0.03)
+    sensor1.v1   = wp.vec2(0.06, -0.03)
+    sensor1.i0   = 512
+    sensor1.i1   = 512
+
+    sensorsList.append(sensor1)
+
+    sensor1Buffer = wp.zeros((sensor1.i0, sensor1.i1), dtype=wp.float32)
+    sensor1Data   = sensor1Buffer.numpy()
+
+    fig2, ax2 = plt.subplots()
+
+    heatmap = np.zeros((sensor1.i0, sensor1.i1), dtype=np.float32)
+
+    im = ax2.imshow(
+        heatmap.T,
+        origin="lower",
+        aspect="auto",
+        interpolation="nearest",
+        vmin=0.0,
+        vmax=1.0
+    )
+
+    ax2.set_xlabel("Bin horizontal du capteur")
+    ax2.set_ylabel("Angle  à la normale du capteur")
+    ax2.set_title("Capteur plénoptique simulé")
+
+    ax2.set_ylim(0, sensor1.i1 - 1)
+
+    ticks = np.linspace(0, sensor1.i1 - 1, 5)
+    labels = np.linspace(-90, 90, 5).astype(int)
+
+    ax2.set_yticks(ticks)
+    ax2.set_yticklabels(labels)
+    ax2.set_ylabel("Angle à la normale du capteur (°)")
+
+    fig2.canvas.draw()
+    background2 = fig2.canvas.copy_from_bbox(ax2.bbox)
+
+    plt.show(block=False)
+
+    sensorsBufferList.append(sensor1Buffer)
+    sensorsDataList.append(sensor1Data)
 
     nbSensors = len(sensorsList)
 
@@ -356,7 +403,7 @@ if __name__ == "__main__":
 
                     fig.canvas.restore_region(background)
 
-                    # update des donn�es uniquement
+                    # update des données uniquement
                     line.set_data(x, y)
 
                     # redraw minimal
@@ -372,7 +419,7 @@ if __name__ == "__main__":
                     sensorAngleData = sensorsDataList[sensorID][1]
 
                     wp.launch(
-                        kernel  = accumulateShackHartmannIdealSensor,
+                        kernel  = accumulateIdealShackHartmannSensor,
                         dim     = sensor.i0,
                         inputs  = [intersectionsBuffer, nbParallelRays, sensor],
                         outputs = [sensorCountBuffer, sensorAngleBuffer]
@@ -384,6 +431,33 @@ if __name__ == "__main__":
 
                     sensorsDataList[sensorID][0] = sensorCountData
                     sensorsDataList[sensorID][1] = sensorAngleData
+
+                elif (sensor.type == 2): # Plenoptic sensor
+                    plenopticSensorBuffer = sensorsBufferList[sensorID]
+                    plenopticSensorData   = sensorsDataList[sensorID]
+                    
+                    wp.launch(
+                        kernel  = accumulateIdealPlenopticSensor,
+                        dim     = sensor.i0,
+                        inputs  = [intersectionsBuffer, nbParallelRays, sensor],
+                        outputs = [plenopticSensorBuffer]
+                    )
+
+                    plenopticSensorData = (plenopticSensorData * (nbIterations - nbParallelRays) + plenopticSensorBuffer.numpy()) / nbIterations
+
+                    sensorsDataList[sensorID] = plenopticSensorData
+
+                    data = plenopticSensorData
+                    data = data / np.max(data) if np.max(data) > 0 else data
+
+                    fig2.canvas.restore_region(background2)
+
+                    im.set_data(data.T)
+
+                    # redraw minimal
+                    ax2.draw_artist(im)
+                    fig2.canvas.blit(ax2.bbox)
+                    fig2.canvas.flush_events()
 
             # IV. If all rays are dead, we can break the loop
             # We can also break if we have reached max depth.
