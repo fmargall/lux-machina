@@ -1,6 +1,6 @@
 import warp as wp
 
-from structures import LightSource, Ray
+from structures import LightSource, LightSource3D, Ray, Ray3D
 
 @wp.func
 def generateRayFromPointLightSource(
@@ -13,6 +13,31 @@ def generateRayFromPointLightSource(
     ray = Ray()
     ray.origin    = lightSource.v0
     ray.direction = wp.vec2(wp.cos(theta), wp.sin(theta))
+    ray.depth     = 0
+    ray.energy    = lightSource.f0
+    ray.isAlive   = True
+
+    return ray
+
+@wp.func
+def generateRayFrom3DPointLightSource(
+    lightSource: LightSource3D,
+    seed       : wp.int32,
+) -> Ray3D:
+    
+    seedTheta = 532654 * seed + 45615685
+    seedPhi   = 203115 * seed + 15314848
+    randTheta = wp.randf(wp.uint32(seedTheta))
+    randPhi   = wp.randf(wp.uint32(seedPhi))
+    
+    theta = randTheta * 1.570796326794896
+    phi   = randPhi   * 6.283185307179586
+    
+    ray = Ray3D()
+    ray.origin    = lightSource.v0
+    ray.direction = wp.vec3(wp.sin(theta) * wp.cos(phi), 
+                            wp.sin(theta) * wp.sin(phi),
+                            wp.cos(theta))
     ray.depth     = 0
     ray.energy    = lightSource.f0
     ray.isAlive   = True
@@ -44,6 +69,46 @@ def generateRayFromLambertianSource(
 
     return ray
 
+@wp.func
+def generateRayFrom3DLambertianSource(
+    lightSource: LightSource3D,
+    seed       : wp.int32,
+) -> Ray3D:
+    
+    seedSquare = 478413 * seed + 34841534
+    seedTheta  = 654612 * seed + 65841231
+    seedPhi    = 851524 * seed + 23132452
+
+    lightCenter    = lightSource.v0
+    lightTangent   = lightSource.v1
+    lightBitangent = lightSource.v2
+    lightNormal    = wp.cross(wp.normalize(lightTangent), wp.normalize(lightBitangent))
+
+    randSquare = wp.sample_unit_square(wp.uint32(seedSquare))
+    randX = randSquare.x - wp.float32(0.5) # (in [-0.5 ; +0.5])
+    randY = randSquare.y - wp.float32(0.5) # (in [-0.5 ; +0.5])
+
+    ray = Ray3D()
+    ray.origin = lightCenter + randX * lightTangent + randY * lightBitangent
+
+    randTheta = wp.randf(wp.uint32(seedTheta))
+    randPhi   = wp.randf(wp.uint32(seedPhi))
+
+    # Hemisphere cosine-weighted sampling
+    # since the source is Lambertian here
+    theta =  wp.acos(wp.sqrt(randTheta))
+    phi   = randPhi * 6.283185307179586
+    
+    direction = wp.sin(theta) * wp.cos(phi) * wp.normalize(lightTangent)   \
+              + wp.sin(theta) * wp.sin(phi) * wp.normalize(lightBitangent) \
+              + wp.cos(theta)               * wp.normalize(lightNormal)
+    ray.direction = wp.normalize(direction)
+    ray.depth     = 0
+    ray.energy    = lightSource.f0
+    ray.isAlive   = True
+
+    return ray
+
 @wp.kernel
 def generatePrimaryRays(
     frameID            : wp.int32,
@@ -65,5 +130,29 @@ def generatePrimaryRays(
         ray = generateRayFromPointLightSource(lightSource, seed)
     if lightSource.type == 1: # Lambertian light source
         ray = generateRayFromLambertianSource(lightSource, seed)
+
+    raysBuffer[ID] = ray
+
+@wp.kernel
+def generatePrimary3DRays(
+    frameID            : wp.int32,
+    lightSourcesBuffer : wp.array(dtype=LightSource3D, ndim=1),
+
+    raysBuffer         : wp.array(dtype=Ray3D, ndim=1)
+):
+    # Get ray ID
+    ID = wp.tid()
+
+    # Pseudo-random seed generation
+    seed = ID + frameID * raysBuffer.shape[0]
+
+    # Selecting one light source
+    # (For now always first one)
+    lightSource = lightSourcesBuffer[0]
+
+    if lightSource.type == 0: # Point light source
+        ray = generateRayFrom3DPointLightSource(lightSource, seed)
+    if lightSource.type == 1: # Lambertian light source
+        ray = generateRayFrom3DLambertianSource(lightSource, seed)
 
     raysBuffer[ID] = ray

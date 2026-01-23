@@ -8,6 +8,14 @@ class Ray:
     depth    : wp.int32
     energy   : wp.float32
 
+@wp.struct
+class Ray3D:
+    isAlive  : wp.bool
+    origin   : wp.vec3
+    direction: wp.vec3
+    depth    : wp.int32
+    energy   : wp.float32
+
 """
    Types:
    ------
@@ -95,6 +103,27 @@ class LightSource:
     type: wp.int32
     v0  : wp.vec2
     v1  : wp.vec2
+    f0  : wp.float32
+
+"""
+   Types:
+   ------
+   0: Pointlight. Requires:
+    - v0: wp.vec3  (Origin)
+    - f0: wp.float (Intensity)
+   1: Parallelogram Lambertian. Requires:
+    - v0: wp.vec3 (Center) 
+    - v1: wp.vec3 (Tangent)   # NOT normalized. Its length gives the length of the light source
+    - v2: wp.vec3 (Bitangent) # NOT normalized. Its length gives the width  of the light source
+      # The normal will be then computed from the two first tangent and bitangent vectors.
+    - f0: wp.float32 (Intensity)
+"""
+@wp.struct
+class LightSource3D:
+    type: wp.int32
+    v0  : wp.vec3
+    v1  : wp.vec3
+    v2  : wp.vec3
     f0  : wp.float32
 
 """
