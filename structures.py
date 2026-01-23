@@ -2,48 +2,121 @@ import warp as wp
 
 @wp.struct
 class Ray:
+    isAlive  : wp.bool
     origin   : wp.vec2
     direction: wp.vec2
     depth    : wp.int32
-    weight   : wp.float32
-    alive    : wp.bool
+    energy   : wp.float32
+
+"""
+   Types:
+   ------
+  -1: Bounding box. Requires:
+    - f0: wp.float32 (Aspect ratio)
+   0: Ideal lens. Requires:
+    - v0: wp.vec2 (Point 1)
+    - v1: wp.vec2 (Point 2)
+    - f0: wp.float32 (focal length)
+   1: Segment. Requires:
+    - v0: wp.vec2 (Origin) # From v0 and v1 the normal is computed
+    - v1: wp.vec2 (End)    # (ie. +90° in trigonometric direction)
+    - f0: wp.float32   (refractive index in the +normal direction)
+    - f1: wp.float32   (refractive index in the -normal direction)
+   2: Circular arc. Requires:
+    - v0: wp.vec2    (Origin) # Center of circle
+    - f0: wp.float32 (Radius)
+    - f1: wp.float32 (Angle of starting point)
+    - f2: wp.float32 (Angle of ending point)
+    - f3: wp.float32 (refractive index in the +normal direction)
+    - f4: wp.float32 (refractive index of the -normal direction)
+   3: Aspheric lens. Requires:
+    - v0 : wp.vec2    (Point 1) # Equivalent to x = -1 point
+    - v1 : wp.vec2    (Point 2) # Equivalent to x =  1 point
+    - f0 : wp.float32 (Radius)
+    - f1 : wp.float32 (Conic constant)
+    - f2 : wp.float32 (refractive index in the +normal direction)
+    - f3 : wp.float32 (refractive index in the -normal direction)
+    - f4 : wp.float32 (y-intercept) 
+    - f5 : wp.float32 (normalization factor)
+    - f6 : wp.float32 (1st coefficient, associated to  2nd power)
+    - f7 : wp.float32 (2nd coefficient, associated to  4th power)
+    - f8 : wp.float32 (3rd coefficient, associated to  6th power)
+    - f9 : wp.float32 (4th coefficient, associated to  8th power)
+    - f10: wp.float32 (5th coefficient, associated to 10th power)
+   4: Blocker. Requires:
+    - v0: wp.vec2 (Point 1)
+    - v1: wp.vec2 (Point 2)
+"""
+@wp.struct
+class Primitive:
+    type: wp.int32
+    v0  : wp.vec2
+    v1  : wp.vec2
+    f0  : wp.float32
+    f1  : wp.float32
+    f2  : wp.float32
+    f3  : wp.float32
+    f4  : wp.float32
+    f5  : wp.float32
+    f6  : wp.float32
+    f7  : wp.float32
+    f8  : wp.float32
+    f9  : wp.float32
+    f10 : wp.float32
 
 @wp.struct
 class Segment:
-    s0: wp.vec2
-    s1: wp.vec2
-    weight: wp.float32
+    v0: wp.vec2
+    v1: wp.vec2
+    f0: wp.float32
 
 @wp.struct
 class Intersection:
-    missed  : wp.bool # whether an intersection occurred
-    hitPoint: wp.vec2
-    normal  : wp.vec2 # surface normal at intersection (pointing outside)
-    ni      : wp.float32 # refractive index outside (in front of normal)
-    no      : wp.float32 # refractive index inside   (behind the normal)
+    hit      : wp.bool
+    hitPoint : wp.vec2
+    normal   : wp.vec2 # surface normal at intersection (pointing outside)
+    ray      : Ray
+    primitive: Primitive
+
 
 """
-   Type:
-    0: Point light source. Requires:
-     - p0: wp.vec2 (Position)
-     - intensity: wp.float32
-    
-    1: Lambertian light source. Requires:
-     - p0: wp.vec2 (Start position of segment)
-     - p1: wp.vec2 (End position of segment)
-     - intensity: wp.float32
+   Types:
+   ------
+   0: Pointlight. Requires:
+    - v0: wp.vec2  (Origin)
+    - f0: wp.float (Intensity)
+   1: Lambertian. Requires:
+    - v0: wp.vec2 (Origin) # From v0 and v1 the normal is computed
+    - v1: wp.vec2 (End)    # (ie. +90° in trigonometric direction)
+    - f0: wp.float32 (Intensity)
 """
 @wp.struct
 class LightSource:
     type: wp.int32
-    intensity: wp.float32
-    p0: wp.vec2
-    p1: wp.vec2
+    v0  : wp.vec2
+    v1  : wp.vec2
+    f0  : wp.float32
 
+"""
+   Types:
+   0: Ideal sensor. Requires:
+    - v0: wp.vec2  (Origin)
+    - v1: wp.vec2  (End)
+    - i0: wp.int32 (Number of pixels)
+   1: Ideal Shack-Hartmann sensor. Requires:
+    - v0: wp.vec2  (Origin)
+    - v1: wp.vec2  (End)
+    - i0: wp.int32 (Number of pixels)
+   2: Ideal plenoptic sensor. Requires:
+    - v0: wp.vec2  (Origin)
+    - v1: wp.vec2  (End)
+    - i0: wp.int32 (Number of spatial bins, or "pixels")
+    - i1: wp.int32 (Number of angular bins)
+"""
 @wp.struct
-class Primitive:
+class Sensor:
     type: wp.int32
-    p0  : wp.vec2
-    p1  : wp.vec2
-    ni  : wp.float32
-    no  : wp.float32
+    v0  : wp.vec2
+    v1  : wp.vec2
+    i0  : wp.int32
+    i1  : wp.int32

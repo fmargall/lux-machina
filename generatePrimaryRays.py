@@ -11,11 +11,11 @@ def generateRayFromPointLightSource(
     theta = rand * 6.283185307179586
     
     ray = Ray()
-    ray.origin    = lightSource.p0
+    ray.origin    = lightSource.v0
     ray.direction = wp.vec2(wp.cos(theta), wp.sin(theta))
     ray.depth     = 0
-    ray.weight    = lightSource.intensity
-    ray.alive     = True
+    ray.energy    = lightSource.f0
+    ray.isAlive   = True
 
     return ray
 
@@ -27,17 +27,20 @@ def generateRayFromLambertianSource(
     rand = wp.randf(wp.uint32(seed))
 
     ray = Ray()
-    ray.origin = lightSource.p0 + (lightSource.p1 - lightSource.p0) * rand
-    normal = wp.normalize(wp.vec2(-(lightSource.p1 - lightSource.p0).y, (lightSource.p1 - lightSource.p0).x))
+    ray.origin = lightSource.v0 + (lightSource.v1 - lightSource.v0) * rand
     
-    seed = seed * 747796405 + 2891336453
-    rand = wp.randf(wp.uint32(seed))
+    lightTangent = wp.normalize(lightSource.v1 - lightSource.v0)
+    lightNormal  = wp.normalize(wp.vec2(-lightTangent.y, lightTangent.x))
+    
+    seed  = seed * 747796405 + 2891336453
+    rand  = wp.randf(wp.uint32(seed))
     theta = wp.asin(2. * rand - 1.)
-    ray.direction = wp.cos(theta) * normal + wp.sin(theta) * wp.vec2(-normal.y, normal.x)
+    
+    ray.direction = wp.cos(theta) * lightNormal + wp.sin(theta) * lightTangent
 
-    ray.depth  = 0
-    ray.weight = lightSource.intensity
-    ray.alive  = True
+    ray.depth   = 0
+    ray.energy  = lightSource.f0
+    ray.isAlive = True
 
     return ray
 
