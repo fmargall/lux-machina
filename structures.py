@@ -92,6 +92,24 @@ class Primitive:
     - f0: wp.float32 (Angle of the spherical cap: pi(/2) for an (hemi)sphere)
     - f1: wp.float32 (Refractive index in the +normal direction, ie. the outside)
     - f2: wp.float32 (Refractive index in the -normal direction, ie. the inside)
+   3: Aspheric lens. Requires:
+    - v0: wp.vec3    (Origin of   axis)
+    - v1: wp.vec3    (Normal of z-axis)
+    - f0 : wp.float32 (Radius)
+    - f1 : wp.float32 (Conic constant)
+    - f2 : wp.float32 (refractive index in the +normal direction)
+    - f3 : wp.float32 (refractive index in the -normal direction)
+    - f4 : wp.float32 (y-intercept) 
+    - f5 : wp.float32 (normalization factor)
+    - f6 : wp.float32 (1st coefficient, associated to  2nd power)
+    - f7 : wp.float32 (2nd coefficient, associated to  4th power)
+    - f8 : wp.float32 (3rd coefficient, associated to  6th power)
+    - f9 : wp.float32 (4th coefficient, associated to  8th power)
+    - f10: wp.float32 (5th coefficient, associated to 10th power)
+   4: Cylinder blocker. Requires:
+    - v0: wp.vec3    (Center of basis)
+    - v1: wp.vec3    (Normal of basis with height as length)
+    - f0: wp.float32 (Radius)
 """
 @wp.struct
 class Primitive3D:
@@ -101,6 +119,14 @@ class Primitive3D:
     f0  : wp.float32
     f1  : wp.float32
     f2  : wp.float32
+    f3  : wp.float32
+    f4  : wp.float32
+    f5  : wp.float32
+    f6  : wp.float32
+    f7  : wp.float32
+    f8  : wp.float32
+    f9  : wp.float32
+    f10 : wp.float32
 
 @wp.struct
 class Segment:
@@ -115,6 +141,14 @@ class Intersection:
     normal   : wp.vec2 # surface normal at intersection (pointing outside)
     ray      : Ray
     primitive: Primitive
+
+@wp.struct
+class Intersection3D:
+    hit      : wp.bool
+    hitPoint : wp.vec3
+    normal   : wp.vec3 # surface normal at intersection (pointing outside)
+    ray      : Ray3D
+    primitive: Primitive3D
 
 
 """
