@@ -573,6 +573,66 @@ def intersectRays(
         raysStatusBuffer[ID] = intersection.ray.isAlive
 
 @wp.func
+def intersect3DRayWithParallelogram(
+    ray      : Ray3D,
+    primitive: Primitive3D
+) -> Intersection3D:
+
+    v0 = primitive.v0 # Connected to 1 and 3
+    v1 = primitive.v1 # Connected to 0 and 2
+    v2 = primitive.v2 # Connected to 1 and 3
+    v3 = primitive.v3 # Connected to 0 and 2
+
+    u = v1 - v0
+    v = v2 - v0
+    n = wp.normalize(wp.cross(u, v))
+
+    intersection = Intersection3D()
+    intersection.hit = False
+
+    # First let's check where, and 
+    # if, the ray intersects plane
+    t = wp.dot((v0 - ray.origin), n) / wp.dot(ray.direction, n)
+
+    # Intersection cannot be before ray origin
+    if t < wp.float32(0.):
+        return intersection
+
+    # Intersection point is inside the parallelogram if it verifies:
+    # intersection = alpha * u + beta * v | (alpha, beta) in [0, 1]²
+    hitPoint = ray.origin + t * ray.direction
+
+    w = hitPoint - v0
+
+    M = wp.matrix(
+        [[wp.dot(u, u), wp.dot(u, v)],
+         [wp.dot(u, v), wp.dot(v, v)]],
+        dtype=wp.float32
+    )
+
+    b = wp.vec2(
+        wp.dot(w, u),
+        wp.dot(w, v)
+    )
+
+    Minv = wp.invert(M)
+    alphaBeta = Minv @ b
+    alpha = alphaBeta[0]
+    beta  = alphaBeta[1]
+
+    # Intersection point is not on the parallelogram.
+    if alpha < 0.0 or alpha > 1.0: return intersection
+    if alpha < 0.0 or alpha > 1.0: return intersection
+
+    # Intersection is inside the parallelogram
+    intersection.hitPoint  = hitPoint
+    intersection.normal    = n
+    intersection.ray       = ray
+    intersection.primitive = primitive
+
+    return intersection
+
+@wp.func
 def intersect3DRayWithAnnulusBlocker(
     ray      : Ray3D,
     primitive: Primitive3D
@@ -745,7 +805,9 @@ def intersect3DRayWithAsphericLens(
     ray      : Ray3D,
     primitive: Primitive3D
 ) -> Intersection3D:
-    pass
+    
+    localAxisOrigin = primitive.v0
+    zAxisUnitVector = primitive.v1
 
 @wp.func
 def intersect3DRayWithCylinderBlocker(
@@ -756,7 +818,6 @@ def intersect3DRayWithCylinderBlocker(
     intersection = intersect3DRayWithCylinder(ray, primitive)
     intersection.ray.isAlive = False
     return intersection
-
 
 @wp.kernel
 def intersect3DRays(
