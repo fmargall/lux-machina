@@ -633,6 +633,39 @@ def intersect3DRayWithParallelogram(
     return intersection
 
 @wp.func
+def intersect3DRayWithDisk(
+    ray      : Ray3D,
+    primitive: Primitive3D
+) -> Intersection3D:
+    
+    center = primitive.v0
+    normal = wp.normalize(primitive.v1)
+    radius = wp.norm_l2(primitive.v1)
+
+    intersection = Intersection3D()
+    intersection.hit = False
+
+    # Firstly, we need to check the intersection between
+    # the ray and the plane where the annulus is defined
+    t = wp.dot(origin - ray.origin, normal) / wp.dot(ray.direction, normal)
+
+    if t < 0.:
+        # Hit must be after ray origin
+        return intersection
+
+    planeIntersection = ray.origin + t * ray.direction
+    distanceToCenter  = wp.norm_l2(planeIntersection - origin)
+
+    if (distanceToCenter <= radius):
+        intersection.hit       = True
+        intersection.hitPoint  = planeIntersection
+        intersection.normal    = normal
+        intersection.ray       = ray
+        intersection.primitive = primitive
+
+    return intersection
+
+@wp.func
 def intersect3DRayWithAnnulusBlocker(
     ray      : Ray3D,
     primitive: Primitive3D
@@ -667,9 +700,7 @@ def intersect3DRayWithAnnulusBlocker(
         # killed, since the primitive is blocking it.
         intersection.ray.isAlive = False
 
-    else:
-        # Hit was outside 
-        return intersection
+    return intersection
 
 @wp.func
 def intersect3DRayWithCylinder(
@@ -808,6 +839,10 @@ def intersect3DRayWithAsphericLens(
     
     localAxisOrigin = primitive.v0
     zAxisUnitVector = primitive.v1
+
+    # Before checking intersection, let's check
+    # the bounding box that can be defined with
+    # two disks and a cylinder.
 
 @wp.func
 def intersect3DRayWithCylinderBlocker(
