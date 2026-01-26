@@ -577,7 +577,39 @@ def intersect3DRayWithAnnulusBlocker(
     ray      : Ray3D,
     primitive: Primitive3D
 ) -> Intersection3D:
-    pass
+
+    intersection = Intersection3D()
+    intersection.hit = False
+
+    origin = primitive.v0
+    normal = wp.normalize(primitive.v1)
+    innerRadius = primitive.f0
+    outerRadius = primitive.f1
+
+    # Firstly, we need to check the intersection between
+    # the ray and the plane where the annulus is defined
+    t = wp.dot(origin - ray.origin, normal) / wp.dot(ray.direction, normal)
+
+    if t < 0.:
+        # Hit must be after ray origin
+        return intersection
+
+    planeIntersection = ray.origin + t * ray.direction
+    distanceToCenter  = wp.norm_l2(planeIntersection - origin)
+
+    if ((distanceToCenter >= innerRadius) and
+        (distanceToCenter <= outerRadius)):
+        # Annulus blocker has been hit
+        intersection.hit = True
+        intersection.hitPoint = planeIntersection
+
+        # If there's an intersection, the ray will be
+        # killed, since the primitive is blocking it.
+        intersection.ray.isAlive = False
+
+    else:
+        # Hit was outside 
+        return intersection
 
 @wp.func
 def intersect3DRayWithCylinder(
@@ -705,7 +737,7 @@ def intersect3DRays(
         tempIntersection.hitPoint = wp.vec3(wp.inf, wp.inf, wp.inf) 
 
         if   primitive.type == 0: # Annulus blocker
-            pass # tempIntersection = intersect3DRayWithAnnulusBlocker(ray, primitive)
+            tempIntersection = intersect3DRayWithAnnulusBlocker(ray, primitive)
         elif primitive.type == 1: # Cylinder
             tempIntersection = intersect3DRayWithCylinder(ray, primitive)
         elif primitive.type == 2: # Spherical cap
