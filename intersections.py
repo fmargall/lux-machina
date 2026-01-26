@@ -1,6 +1,7 @@
 import warp as wp
 
-from structures import Intersection, Primitive, Ray
+from structures import Intersection  , Primitive  , Ray  , \
+                       Intersection3D, Primitive3D, Ray3D
 
 @wp.func
 def cross(a: wp.vec2, b: wp.vec2) -> wp.float32:
@@ -465,7 +466,7 @@ def intersectRayWithCircularArc(
         t2 = (- b + wp.sqrt(discriminant)) / (2. * a)
 
         # Both t should be tested before chosing one
-        smallestT = wp.float32(1.e15)
+        smallestT = wp.float32(wp.inf)
 
         ts = wp.vec2(t1, t2)
         for tID in range(2):
@@ -494,7 +495,7 @@ def intersectRayWithCircularArc(
 
             if (hitCircularArc and t < smallestT): smallestT = t
 
-        if smallestT < wp.float32(1.e15):
+        if smallestT < wp.float32(wp.inf):
             # One solution has been found
             ray.isAlive = True
 
@@ -554,6 +555,165 @@ def intersectRays(
             tempIntersection = intersectRayWithAsphericLens(ray, primitive)
         elif primitive.type ==  4: # Blocker
             tempIntersection = intersectRayWithBlocker(ray, primitive)
+        else:
+            continue
+
+        # Saving intersection if closer
+        if tempIntersection.hit == True:
+            tempDistance = wp.norm_l2(tempIntersection.hitPoint - ray.origin)
+            if tempDistance < minimumDistance:
+                minimumDistance = tempDistance
+                intersection = tempIntersection
+        
+    # Saving final intersection
+    intersectionsBuffer[ID] = intersection
+    
+    # Saving ray status
+    if intersection.hit == True:
+        raysStatusBuffer[ID] = intersection.ray.isAlive
+
+@wp.func
+def intersect3DRayWithAnnulusBlocker(
+    ray      : Ray3D,
+    primitive: Primitive3D
+) -> Intersection3D:
+    pass
+
+@wp.func
+def intersect3DRayWithCylinder(
+    ray      : Ray3D,
+    primitive: Primitive3D
+) -> Intersection3D:
+
+    centerOfBasis = primitive.v0
+    normalOfBasis = wp.normalize(primitive.v1)
+    height        = wp.norm_l2(primitive.v1)
+    radius        = primitive.f0
+
+    # The equations for an infinite cylinder are
+    # ||a /\ (p - b)||² = r²     a: cylinder axis b: cylinder basis
+    # 0 <= a * (p - b) <= h      r: radius        h: height:
+    #                            p: any point on the cylinder
+    # The equation for a ray is:
+    # p = o + n t                # o: ray origin  n: ray direction
+
+    b = centerOfBasis - ray.origin
+    cross = wp.cross(ray.direction, normalOfBasis)
+
+    discriminant = wp.dot(cross, cross) * radius * radius - wp.pow(wp.dot(b, cross), 2.)
+
+    intersection = Intersection3D()
+    intersection.hit = False
+
+    if discriminant >= 0.:
+        # The ray does intersect the infinite cylinder
+        d1 = (wp.dot(cross, wp.cross(b, normalOfBasis)) + wp.sqrt(discriminant)) / (wp.dot(cross, cross)) 
+        d2 = (wp.dot(cross, wp.cross(b, normalOfBasis)) - wp.sqrt(discriminant)) / (wp.dot(cross, cross))
+
+        # Both d should be tested before chosing one
+        smallestD = wp.float32(wp.inf)
+
+        ds = wp.vec2(d1, d2)
+        for dID in range(2):
+            # Both solutions should be tried and compared
+            d = ds[dID]
+
+            # Computing the distance from cylinder basis
+            t = wp.dot(normalOfBasis, (ray.direction * d - b))
+
+            # t needs to be between 0 and cylinder height
+            if t < 0. or t > height: continue
+
+            # If t fits d gives us the right hitPoint
+            if d < smallestD: smallestD = d
+
+        if smallestD < wp.float32(wp.inf):
+            # One solution has been found
+            ray.isAlive = True
+
+            intersection.hit = True
+            intersection.hitPoint = ray.origin + smallestD * ray.direction
+
+            # Computing the normal
+            t = wp.dot(normalOfBasis, (ray.direction * smallestD - b))
+            normal = ray.direction * smallestD - normalOfBasis * t - b
+            intersection.normal = wp.normalize(normal)
+
+            intersection.ray       = ray
+            intersection.primitive = primitive
+
+    return intersection
+
+@wp.func
+def intersect3DRayWithSphericalCap(
+    ray      : Ray3D,
+    primitive: Primitive3D
+) -> Intersection3D:
+    pass
+
+@wp.func
+def intersect3DRayWithAsphericLens(
+    ray      : Ray3D,
+    primitive: Primitive3D
+) -> Intersection3D:
+    pass
+
+@wp.func
+def intersect3DRayWithCylinderBlocker(
+    ray      : Ray3D,
+    primitive: Primitive3D
+) -> Intersection3D:
+    # Blocker is nothing else but cylinder that blocks light.
+    intersection = intersect3DRayWithCylinder(ray, primitive)
+    intersection.ray.isAlive = False
+    return intersection
+
+
+@wp.kernel
+def intersect3DRays(
+    raysBuffer      : wp.array(dtype=Ray3D, ndim=1),
+    primitivesBuffer: wp.array(dtype=Primitive3D, ndim=1),
+    nbPrimitives    : wp.int32,
+
+    intersectionsBuffer: wp.array(dtype=Intersection3D, ndim=1),
+    raysStatusBuffer   : wp.array(dtype=wp.bool, ndim=1)
+):
+    ID = wp.tid()
+
+    ray = raysBuffer[ID]
+
+    # Initializing intersection
+    intersection = Intersection3D()
+    intersection.hit = False # No intersection
+    intersection.ray = ray
+    intersection.hitPoint = wp.vec3(wp.inf, wp.inf, wp.inf) 
+    intersectionsBuffer[ID] = intersection
+
+    # If several intersections are found,
+    # the one we keep will be the closest
+    minimumDistance = wp.float32(wp.inf)
+    
+    # Setting ray as dead by default
+    ray.isAlive          = False
+    raysStatusBuffer[ID] = False
+
+    for primitiveID in range(nbPrimitives):
+        primitive = primitivesBuffer[primitiveID]
+
+        tempIntersection = Intersection3D()
+        tempIntersection.hit      = False
+        tempIntersection.hitPoint = wp.vec3(wp.inf, wp.inf, wp.inf) 
+
+        if   primitive.type == 0: # Annulus blocker
+            pass # tempIntersection = intersect3DRayWithAnnulusBlocker(ray, primitive)
+        elif primitive.type == 1: # Cylinder
+            tempIntersection = intersect3DRayWithCylinder(ray, primitive)
+        elif primitive.type == 2: # Spherical cap
+            pass # tempIntersection = intersect3DRayWithSphericalCap(ray, primitive)
+        elif primitive.type == 3: # Aspheric lens
+            pass # tempIntersection = intersect3DRayWithAsphericLens(ray, primitive)
+        elif primitive.type == 4: # Cylinder blocker
+            tempIntersection = intersect3DRayWithCylinderBlocker(ray, primitive)
         else:
             continue
 
