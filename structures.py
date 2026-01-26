@@ -110,12 +110,22 @@ class Primitive:
     - v0: wp.vec3    (Center of basis)
     - v1: wp.vec3    (Normal of basis with height as length)
     - f0: wp.float32 (Radius)
+   5: Parallelogram. Requires:
+    - v0: wp.vec3 (Vertex 0, connected to 1 and 3)
+    - v1: wp.vec3 (Vertex 1, connected to 0 and 2)
+    - v2: wp.vec3 (Vertex 2, connected to 1 and 3)
+    - v3: wp.vec3 (Vertex 3, connected to 0 and 2)
+   6: Disk. Requires:
+    - v0: wp.vec3 (Origin)
+    - v1: wp.vec3 (Normal, with radius as length)
 """
 @wp.struct
 class Primitive3D:
     type: wp.int32
     v0  : wp.vec3
     v1  : wp.vec3
+    v2  : wp.vec3
+    v3  : wp.vec3
     f0  : wp.float32
     f1  : wp.float32
     f2  : wp.float32
@@ -176,6 +186,12 @@ class LightSource:
     - v0: wp.vec3  (Origin)
     - f0: wp.float (Intensity)
    1: Parallelogram Lambertian. Requires:
+    - v0: wp.vec3 (Center) 
+    - v1: wp.vec3 (Tangent)   # NOT normalized. Its length gives the length of the light source
+    - v2: wp.vec3 (Bitangent) # NOT normalized. Its length gives the width  of the light source
+      # The normal will be then computed from the two first tangent and bitangent vectors.
+    - f0: wp.float32 (Intensity)
+   2: Parallelogram collimated light source. Requires:
     - v0: wp.vec3 (Center) 
     - v1: wp.vec3 (Tangent)   # NOT normalized. Its length gives the length of the light source
     - v2: wp.vec3 (Bitangent) # NOT normalized. Its length gives the width  of the light source

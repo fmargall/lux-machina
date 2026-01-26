@@ -109,6 +109,32 @@ def generateRayFrom3DLambertianSource(
 
     return ray
 
+@wp.func
+def generateRayFrom3DCollimatedParallelogramSource(
+    lightSource: LightSource3D,
+    seed       : wp.int32,
+) -> Ray3D:
+    
+    seedSquare = 415365 * seed + 16532131
+
+    lightCenter    = lightSource.v0
+    lightTangent   = lightSource.v1
+    lightBitangent = lightSource.v2
+    lightNormal    = wp.cross(wp.normalize(lightTangent), wp.normalize(lightBitangent))
+
+    randSquare = wp.sample_unit_square(wp.uint32(seedSquare))
+    randX = randSquare.x - wp.float32(0.5) # (in [-0.5 ; +0.5])
+    randY = randSquare.y - wp.float32(0.5) # (in [-0.5 ; +0.5])
+
+    ray = Ray3D()
+    ray.origin = lightCenter + randX * lightTangent + randY * lightBitangent
+    ray.direction = wp.normalize(lightNormal)
+    ray.depth     = 0
+    ray.energy    = lightSource.f0
+    ray.isAlive   = True
+
+    return ray
+
 @wp.kernel
 def generatePrimaryRays(
     frameID            : wp.int32,
@@ -154,5 +180,7 @@ def generatePrimary3DRays(
         ray = generateRayFrom3DPointLightSource(lightSource, seed)
     if lightSource.type == 1: # Lambertian light source
         ray = generateRayFrom3DLambertianSource(lightSource, seed)
+    if lightSource.type == 2: # Collimated parallelogram light source
+        ray = generateRayFrom3DCollimatedParallelogramSource(lightSource, seed)
 
     raysBuffer[ID] = ray
