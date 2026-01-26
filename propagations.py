@@ -183,3 +183,11 @@ def propagateRays(
     else:
         ray.energy = 0.
         raysBuffer[ID] = ray
+
+@wp.func
+def reflect3D(rayDirection: wp.vec3, interfaceNormal: wp.vec3) -> wp.vec3:
+    # Normalizing
+    rayDirection    = wp.normalize(rayDirection)
+    interfaceNormal = wp.normalize(interfaceNormal)
+
+    return rayDirection - 2. * wp.dot(rayDirection, interfaceNormal) * interfaceNormal
