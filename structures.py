@@ -213,3 +213,32 @@ class Sensor:
     v1  : wp.vec2
     i0  : wp.int32
     i1  : wp.int32
+
+"""
+   Types:
+   0: Ideal 3D sensor. Requires:
+    - v0: wp.vec3 (Center)
+    - v1: wp.vec3 (Tangent)   # NOT normalized. Its length gives the length of the light source
+    - v2: wp.vec3 (Bitangent) # NOT normalized. Its length gives the width  of the light source
+      # The normal will be then computed from the two first tangent and bitangent vectors.
+    - i0: wp.int32 (Number of pixels on the tangential axis)
+      # Pixels are squares, so number of pixels on the bitangential axis is deduced from latter)
+   1: Ideal plenoptic 3D sensor. Requires:
+    - v0: wp.vec3 (Center)
+    - v1: wp.vec3 (Tangent)   # NOT normalized. Its length gives the length of the light source
+    - v2: wp.vec3 (Bitangent) # NOT normalized. Its length gives the width  of the light source
+      # The normal will be then computed from the two first tangent and bitangent vectors.
+    - i0: wp.int32 (Number of pixels on the tangential axis)
+      # Pixels are squares, so number of pixels on the bitangential axis is deduced from latter)
+    - i1: wp.int32 (Number of angular bins over zenithal  angle for each spatial pixel)
+    - i2: wp.int32 (Number of angular bins over azimuthal angle for each spatial pixel)
+"""
+@wp.struct
+class Sensor3D:
+    type: wp.int32
+    v0  : wp.vec3
+    v1  : wp.vec3
+    v2  : wp.vec3
+    i0  : wp.int32
+    i1  : wp.int32
+    i2  : wp.int32
