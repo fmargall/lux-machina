@@ -681,7 +681,64 @@ def intersect3DRayWithSphericalCap(
     ray      : Ray3D,
     primitive: Primitive3D
 ) -> Intersection3D:
-    pass
+    
+    center   = primitive.v0
+    radius   = wp.norm_l2(primitive.v1)
+    capAngle = primitive.f1
+    poleDirection = wp.normalize(primitive.v1)
+
+    direction = wp.normalize(ray.direction)
+
+    # First let's check the intersection with the sphere itself
+    a = 1. # dot(ray.direction, ray.direction), by definition 1
+    b = 2. * (wp.dot(direction, ray.origin - center))
+    c = wp.norm_l2(ray.origin - center) - radius * radius
+
+    discrimant = b * b - 4. * a * c
+
+    intersection = Intersection3D()
+    intersection.hit = False
+
+    if discriminant >= 0.:
+        t1 = (- b + wp.sqrt(discriminant)) / (2. * a)
+        t2 = (- b - wp.sqrt(discriminant)) / (2. * a)
+
+        # Both solutions will be tested
+        smallestT = wp.float32(wp.inf)
+
+        ts = wp.vec2(t1, t2)
+        for tID in range(2):
+            # Both solutions should be tried and compared
+            t = ts[tID]
+
+            # t cannot be negative : the intersection must
+            # be detected after the ray origin, not before
+            if t < 0.: continue
+
+            hitPoint = ray.origin + t * ray.direction
+
+            # Let's check if the hitPoint belongs to
+            # the spherical cap, or if it is outside
+            centerToHitPoint = wp.normalize(hitPoint - center)
+
+            angle = wp.acos(wp.dot(centerToHitPoint, poleDirection))
+
+            if angle <= capAngle:
+                # Point belongs to spherical cap
+                if t < smallestT: smallestT = t
+
+        if smallestT < wp.float32(wp.inf):
+            # One solution has been found
+            ray.isAlive = True
+
+            intersection.hit = True
+            intersection.hitPoint = ray.origin + smallestT * ray.direction
+            intersection.normal   = wp.normalize(intersection.hitPoint - center)
+
+            intersection.ray       = ray
+            intersection.primitive = primitive
+
+    return intersection
 
 @wp.func
 def intersect3DRayWithAsphericLens(
@@ -741,7 +798,7 @@ def intersect3DRays(
         elif primitive.type == 1: # Cylinder
             tempIntersection = intersect3DRayWithCylinder(ray, primitive)
         elif primitive.type == 2: # Spherical cap
-            pass # tempIntersection = intersect3DRayWithSphericalCap(ray, primitive)
+            tempIntersection = intersect3DRayWithSphericalCap(ray, primitive)
         elif primitive.type == 3: # Aspheric lens
             pass # tempIntersection = intersect3DRayWithAsphericLens(ray, primitive)
         elif primitive.type == 4: # Cylinder blocker
