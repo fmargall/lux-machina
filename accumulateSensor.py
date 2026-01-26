@@ -1,6 +1,8 @@
 import warp as wp
 
-from structures import Intersection, Ray, Segment, Sensor
+from structures import Intersection  , Ray  , Segment, Sensor, \
+                       Intersection3D, Ray3D,          Sensor3D
+
 
 from rasterizer import segmentize, doSegmentsIntersect
 
@@ -103,4 +105,22 @@ def accumulateIdealPlenopticSensor(
 
                 wp.atomic_add(plenopticSensorBuffer, spatialBinID, angularBinID, ray.energy)
 
+@wp.kernel
+def accumulateIdeal3DSensor(
+    intersectionsBuffer: wp.array(dtype=Intersection3D, ndim=1),
+    nbParallelRays     : wp.int32,
+    sensor             : Sensor3D,
+    
+    sensorBuffer: wp.array(dtype=wp.float32, ndim=2)
+):
+    pass
 
+@wp.kernel
+def accumulateIdealPlenoptic3DSensor(
+    intersectionsBuffer: wp.array(dtype=Intersection3D, ndim=1),
+    nbParallelRays     : wp.int32,
+    sensor             : Sensor3D,
+
+    plenopticSensorBuffer: wp.array(dtype=wp.float32, ndim=4)
+):
+    pass
