@@ -785,7 +785,7 @@ def intersect3DRayWithSphericalCap(
     b = 2. * (wp.dot(direction, ray.origin - center))
     c = wp.norm_l2(ray.origin - center) - radius * radius
 
-    discrimant = b * b - 4. * a * c
+    discriminant = b * b - 4. * a * c
 
     intersection = Intersection3D()
     intersection.hit = False

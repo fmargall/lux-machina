@@ -107,29 +107,30 @@ if __name__ == "__main__":
     primitivesList.append(bbox)
 
     # Aspheric lens
-    nIOR = 1.51
+    nI = 1.
+    nO = 1.51
     asphericLens00 = Primitive()
     asphericLens00.type = 2
     asphericLens00.v0   = wp.vec2(0.0718379, 0.)
     asphericLens00.f0   = wp.float32(0.06999948)
     asphericLens00.f1   = wp.float32(2.959153)
     asphericLens00.f2   = wp.float32(3.324033)
-    asphericLens00.f3   = wp.float32(nIOR)
-    asphericLens00.f4   = wp.float32(1.0)
+    asphericLens00.f3   = wp.float32(nI)
+    asphericLens00.f4   = wp.float32(nO)
 
     asphericLens01 = Primitive()
     asphericLens01.type = 1
     asphericLens01.v0   = wp.vec2(0.0030, 0.01270)
     asphericLens01.v1   = wp.vec2(0.0042, 0.01270)
-    asphericLens01.f0   = wp.float32(nIOR)
-    asphericLens01.f1   = wp.float32(1.)
+    asphericLens01.f0   = wp.float32(nI)
+    asphericLens01.f1   = wp.float32(nO)
 
     asphericLens10 = Primitive()
     asphericLens10.type = 1
     asphericLens10.v0   = wp.vec2(0.0030, -0.01270)
     asphericLens10.v1   = wp.vec2(0.0042, -0.01270)
-    asphericLens10.f0   = wp.float32(1.)
-    asphericLens10.f1   = wp.float32(nIOR)
+    asphericLens10.f0   = wp.float32(nO)
+    asphericLens10.f1   = wp.float32(nI)
 
     asphericLens11 = Primitive()
     asphericLens11.type = 3
@@ -137,8 +138,8 @@ if __name__ == "__main__":
     asphericLens11.v1   = wp.vec2(0.0042, -0.01270)
     asphericLens11.f0   = wp.float32( 8.818197)
     asphericLens11.f1   = wp.float32(-0.9991715)
-    asphericLens11.f2   = wp.float32(nIOR)
-    asphericLens11.f3   = wp.float32(1.0)
+    asphericLens11.f2   = wp.float32(nI)
+    asphericLens11.f3   = wp.float32(nO)
     asphericLens11.f4   = wp.float32(11.6383)
     asphericLens11.f5   = wp.float32(12.8155)
     asphericLens11.f6   = wp.float32(0.)
@@ -159,22 +160,22 @@ if __name__ == "__main__":
     biconvex00.f0   = wp.float32(0.0592)
     biconvex00.f1   = wp.float32(2.698148)
     biconvex00.f2   = wp.float32(3.585038)
-    biconvex00.f3   = wp.float32(1.51)
-    biconvex00.f4   = wp.float32(1.0)
+    biconvex00.f3   = wp.float32(nI)
+    biconvex00.f4   = wp.float32(nO)
     
     biconvex01 = Primitive()
     biconvex01.type = 1
     biconvex01.v0   = wp.vec2(0.04490, 0.02540)
     biconvex01.v1   = wp.vec2(0.04790, 0.02540)
-    biconvex01.f0   = wp.float32(1.51)
-    biconvex01.f1   = wp.float32(1.)
+    biconvex01.f0   = wp.float32(nI)
+    biconvex01.f1   = wp.float32(nO)
 
     biconvex10 = Primitive()
     biconvex10.type = 1
     biconvex10.v0   = wp.vec2(0.04490, -0.02540)
     biconvex10.v1   = wp.vec2(0.04790, -0.02540)
-    biconvex10.f0   = wp.float32(1.)
-    biconvex10.f1   = wp.float32(1.51)
+    biconvex10.f0   = wp.float32(nO)
+    biconvex10.f1   = wp.float32(nI)
     
     biconvex11 = Primitive()
     biconvex11.type = 2
@@ -182,8 +183,8 @@ if __name__ == "__main__":
     biconvex11.f0   = wp.float32(0.0592)
     biconvex11.f1   = wp.float32(5.839740)
     biconvex11.f2   = wp.float32(0.443445)
-    biconvex11.f3   = wp.float32(1.51)
-    biconvex11.f4   = wp.float32(1.0)
+    biconvex11.f3   = wp.float32(nI)
+    biconvex11.f4   = wp.float32(nO)
 
     primitivesList.append(biconvex00)
     primitivesList.append(biconvex01)
@@ -211,10 +212,10 @@ if __name__ == "__main__":
     blocker3.v0   = wp.vec2(0.04900,  0.02540)
     blocker3.v1   = wp.vec2(0.04900,  0.02290)
 
-    primitivesList.append(blocker0)
-    primitivesList.append(blocker1)
-    primitivesList.append(blocker2)
-    primitivesList.append(blocker3)
+    #primitivesList.append(blocker0)
+    #primitivesList.append(blocker1)
+    #primitivesList.append(blocker2)
+    #primitivesList.append(blocker3)
 
     nbPrimitives = len(primitivesList)
 
