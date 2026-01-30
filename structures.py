@@ -234,7 +234,7 @@ class Sensor:
    Types:
    0: Ideal 3D sensor. Requires:
     - v0: wp.vec3 (Center)
-    - v1: wp.vec3 (Tangent)   # NOT normalized. Its length gives the length of the light source
+    - v1: wp.vec3 (Tangent)   # NOT normalized. Its length gives the height of the light source
     - v2: wp.vec3 (Bitangent) # NOT normalized. Its length gives the width  of the light source
       # The normal will be then computed from the two first tangent and bitangent vectors.
     - i0: wp.int32 (Number of pixels on the tangential axis)

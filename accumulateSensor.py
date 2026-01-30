@@ -1,7 +1,8 @@
 import warp as wp
 
-from structures import Intersection  , Ray  , Segment, Sensor, \
-                       Intersection3D, Ray3D,          Sensor3D
+from intersections import intersect3DRayWithParallelogram
+from structures    import Intersection  , Ray  , Segment    , Sensor, \
+                          Intersection3D, Ray3D, Primitive3D, Sensor3D
 
 
 from rasterizer import segmentize, doSegmentsIntersect
@@ -113,7 +114,29 @@ def accumulateIdeal3DSensor(
     
     sensorBuffer: wp.array(dtype=wp.float32, ndim=2)
 ):
-    pass
+    # Get pixel IDs
+    iID, jID = wp.tid()
+    i, j = wp.float32(iID), wp.float32(jID)
+
+    origin    = sensor.v0 # Lower left corner of the sensor
+    pixelSize = wp.norm_l2(sensor.v1) / wp.float32(sensor.i0)
+    tangent   = wp.normalize(sensor.v1) * pixelSize
+    bitangent = wp.normalize(sensor.v2) * pixelSize
+
+    # Get associated pixel parallelogram
+    pixel = Primitive3D()
+    pixel.type = 5 # Parallelogram
+    pixel.v0 = origin +  i       * tangent +  j       * bitangent
+    pixel.v1 = origin + (i + 1.) * tangent +  j       * bitangent
+    pixel.v2 = origin +  i       * tangent + (j + 1.) * bitangent
+    pixel.v3 = origin + (i + 1.) * tangent + (j + 1.) * bitangent
+
+    for rayID in range(nbParallelRays):
+        ray = intersectionsBuffer[rayID].ray
+
+        intersect = intersect3DRayWithParallelogram(ray, pixel)
+        if intersect.hit:
+            wp.atomic_add(sensorBuffer, i, j, ray.energy)
 
 @wp.kernel
 def accumulateIdealPlenoptic3DSensor(

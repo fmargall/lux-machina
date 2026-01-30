@@ -84,16 +84,16 @@ if __name__ == "__main__":
 
     # 0. Light tracer parameters
     width, height   = 512, 512
-    nbParallelRays  = 10_000
+    nbParallelRays  = 100_000
     maximumRayDepth = 10
-    timeSleep       = 0.
+    timeSleep       = 0
     
     # 0.(i) Light sources initialisation
     lightSourceLED = LightSource()
     lightSourceLED.type = 1
     lightSourceLED.f0   = 1.0
-    lightSourceLED.v0   = wp.vec2( 0.0,   0.0015)
-    lightSourceLED.v1   = wp.vec2( 0.0,  -0.0015)
+    lightSourceLED.v0   = wp.vec2( 0.0,   0.0115)
+    lightSourceLED.v1   = wp.vec2( 0.0,  -0.0115)
     lightSourcesList = [lightSourceLED]
     
     # 0.(ii) Scene primitives initialisation
@@ -186,10 +186,10 @@ if __name__ == "__main__":
     biconvex11.f3   = wp.float32(nI)
     biconvex11.f4   = wp.float32(nO)
 
-    primitivesList.append(biconvex00)
-    primitivesList.append(biconvex01)
-    primitivesList.append(biconvex10)
-    primitivesList.append(biconvex11)
+    #primitivesList.append(biconvex00)
+    #primitivesList.append(biconvex01)
+    #primitivesList.append(biconvex10)
+    #primitivesList.append(biconvex11)
 
     # Blockers
     blocker0 = Primitive()
@@ -298,7 +298,7 @@ if __name__ == "__main__":
     nbSensors = len(sensorsList)
 
     # 0.(iv) Converting to screen coordinates
-    bottomLeftCornerWorldCoordinates = wp.vec2(0.005, -.0275)
+    bottomLeftCornerWorldCoordinates = wp.vec2(0.00, -.0275)
     pixelSizeInWorldUnits = wp.float32(0.055)
     lightSourcesBuffer, primitivesBuffer, sensorsList = worldCoordinatesToScreenCoordinates(
         lightSourcesList, primitivesList, sensorsList,
@@ -381,6 +381,7 @@ if __name__ == "__main__":
                 breakRun = True
                 break
 
+            """
             # III.(iv) Plot results for each sensor
             for sensorID, sensor in enumerate(sensorsList):
 
@@ -459,7 +460,7 @@ if __name__ == "__main__":
                     ax2.draw_artist(im)
                     fig2.canvas.blit(ax2.bbox)
                     fig2.canvas.flush_events()
-
+            """
             # IV. If all rays are dead, we can break the loop
             # We can also break if we have reached max depth.
             if onlyDeadRays or (longestRayDepth >= maximumRayDepth):
