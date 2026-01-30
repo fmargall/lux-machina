@@ -118,25 +118,44 @@ def accumulateIdeal3DSensor(
     iID, jID = wp.tid()
     i, j = wp.float32(iID), wp.float32(jID)
 
-    origin    = sensor.v0 # Lower left corner of the sensor
-    pixelSize = wp.norm_l2(sensor.v1) / wp.float32(sensor.i0)
-    tangent   = wp.normalize(sensor.v1) * pixelSize
-    bitangent = wp.normalize(sensor.v2) * pixelSize
+    nbPixelsTangent   = sensorBuffer.shape[0]
+    nbPixelsBitangent = sensorBuffer.shape[1]
+
+    sensorCenter   = sensor.v0
+    pixelTangent   = sensor.v1 / wp.float32(nbPixelsTangent)
+    pixelBitangent = sensor.v2 / wp.float32(nbPixelsBitangent)
+
+    u = (i + wp.float32(0.5) - wp.float32(nbPixelsTangent)   / wp.float32(2.))
+    v = (j + wp.float32(0.5) - wp.float32(nbPixelsBitangent) / wp.float32(2.))
 
     # Get associated pixel parallelogram
     pixel = Primitive3D()
     pixel.type = 5 # Parallelogram
-    pixel.v0 = origin +  i       * tangent +  j       * bitangent
-    pixel.v1 = origin + (i + 1.) * tangent +  j       * bitangent
-    pixel.v2 = origin +  i       * tangent + (j + 1.) * bitangent
-    pixel.v3 = origin + (i + 1.) * tangent + (j + 1.) * bitangent
+    pixelCenter = sensorCenter + u * pixelTangent + v * pixelBitangent
+    pixel.v0 = pixelCenter - pixelTangent / wp.float32(2.) - pixelBitangent / wp.float32(2.)
+    pixel.v1 = pixelCenter + pixelTangent / wp.float32(2.) - pixelBitangent / wp.float32(2.)
+    pixel.v2 = pixelCenter + pixelTangent / wp.float32(2.) + pixelBitangent / wp.float32(2.)
+    pixel.v3 = pixelCenter - pixelTangent / wp.float32(2.) + pixelBitangent / wp.float32(2.)
 
     for rayID in range(nbParallelRays):
         ray = intersectionsBuffer[rayID].ray
 
         intersect = intersect3DRayWithParallelogram(ray, pixel)
         if intersect.hit:
-            wp.atomic_add(sensorBuffer, i, j, ray.energy)
+
+            # The infinite ray intersects the pixel parallelogram.
+            # We need to check if another intersection has occured
+            # before reaching the sensor.
+            if intersectionsBuffer[rayID].hit:
+                # Is the intersection point before the sensor along the ray?
+                distToHit    = wp.norm_l2(intersectionsBuffer[rayID].hitPoint - ray.origin)
+                distToSensor = wp.norm_l2(intersect.hitPoint - ray.origin)
+
+                if distToSensor < distToHit:
+                    wp.atomic_add(sensorBuffer, wp.int32(i), wp.int32(j), ray.energy)
+
+            else:
+                wp.atomic_add(sensorBuffer, wp.int32(i), wp.int32(j), ray.energy)
 
 @wp.kernel
 def accumulateIdealPlenoptic3DSensor(

@@ -584,7 +584,7 @@ def intersect3DRayWithParallelogram(
     v3 = primitive.v3 # Connected to 0 and 2
 
     u = v1 - v0
-    v = v2 - v0
+    v = v3 - v0
     n = wp.normalize(wp.cross(u, v))
 
     intersection = Intersection3D()
@@ -604,27 +604,28 @@ def intersect3DRayWithParallelogram(
 
     w = hitPoint - v0
 
-    M = wp.matrix(
-        [[wp.dot(u, u), wp.dot(u, v)],
-         [wp.dot(u, v), wp.dot(v, v)]],
-        dtype=wp.float32
-    )
+    A = wp.dot(u, u) # a11
+    B = wp.dot(u, v) # a12 = a21
+    D = wp.dot(v, v) # a22
 
-    b = wp.vec2(
-        wp.dot(w, u),
-        wp.dot(w, v)
-    )
+    b1 = wp.dot(w, u)
+    b2 = wp.dot(w, v)
 
-    Minv = wp.invert(M)
-    alphaBeta = Minv @ b
-    alpha = alphaBeta[0]
-    beta  = alphaBeta[1]
+    det = A * D - B * B
+
+    # If degenerate (parallelogram collapsed), no intersection
+    if det == 0.0:
+        return intersection
+
+    alpha = (D * b1 - B * b2) / det
+    beta  = (-B * b1 + A * b2) / det
 
     # Intersection point is not on the parallelogram.
     if alpha < 0.0 or alpha > 1.0: return intersection
-    if alpha < 0.0 or alpha > 1.0: return intersection
+    if beta  < 0.0 or beta  > 1.0: return intersection
 
     # Intersection is inside the parallelogram
+    intersection.hit       = True
     intersection.hitPoint  = hitPoint
     intersection.normal    = n
     intersection.ray       = ray
@@ -772,18 +773,18 @@ def intersect3DRayWithSphericalCap(
     ray      : Ray3D,
     primitive: Primitive3D
 ) -> Intersection3D:
-    
+
     center   = primitive.v0
     radius   = wp.norm_l2(primitive.v1)
-    capAngle = primitive.f1
+    capAngle = primitive.f0
     poleDirection = wp.normalize(primitive.v1)
 
     direction = wp.normalize(ray.direction)
-
+    
     # First let's check the intersection with the sphere itself
     a = 1. # dot(ray.direction, ray.direction), by definition 1
-    b = 2. * (wp.dot(direction, ray.origin - center))
-    c = wp.norm_l2(ray.origin - center) - radius * radius
+    b = 2. * wp.dot(direction, ray.origin - center)
+    c = wp.dot(ray.origin - center, ray.origin - center) - radius * radius
 
     discriminant = b * b - 4. * a * c
 

@@ -85,8 +85,8 @@ def generateRayFrom3DLambertianSource(
     lightNormal    = wp.cross(wp.normalize(lightTangent), wp.normalize(lightBitangent))
 
     randSquare = wp.sample_unit_square(wp.uint32(seedSquare))
-    randX = randSquare.x - wp.float32(0.5) # (in [-0.5 ; +0.5])
-    randY = randSquare.y - wp.float32(0.5) # (in [-0.5 ; +0.5])
+    randX = randSquare.x # (in [-0.5 ; +0.5])
+    randY = randSquare.y # (in [-0.5 ; +0.5])
 
     ray = Ray3D()
     ray.origin = lightCenter + randX * lightTangent + randY * lightBitangent
@@ -123,8 +123,8 @@ def generateRayFrom3DCollimatedParallelogramSource(
     lightNormal    = wp.cross(wp.normalize(lightTangent), wp.normalize(lightBitangent))
 
     randSquare = wp.sample_unit_square(wp.uint32(seedSquare))
-    randX = randSquare.x - wp.float32(0.5) # (in [-0.5 ; +0.5])
-    randY = randSquare.y - wp.float32(0.5) # (in [-0.5 ; +0.5])
+    randX = randSquare.x # (in [-0.5 ; +0.5])
+    randY = randSquare.y # (in [-0.5 ; +0.5])
 
     ray = Ray3D()
     ray.origin = lightCenter + randX * lightTangent + randY * lightBitangent

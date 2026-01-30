@@ -181,7 +181,7 @@ def propagateRays(
     intersection = intersectionsBuffer[ID]
     ray = intersection.ray
 
-    if ray.isAlive:
+    if ray.isAlive and intersection.hit:
         primitive = intersection.primitive
         
         if   primitive.type == 0: # Ideal lens
@@ -332,7 +332,7 @@ def propagate3DRays(
     intersection = intersectionsBuffer[ID]
     ray = intersection.ray
 
-    if ray.isAlive:
+    if ray.isAlive and intersection.hit:
         primitive = intersection.primitive
         
         if   primitive.type == 1: # Cylinder
