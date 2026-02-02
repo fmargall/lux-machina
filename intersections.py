@@ -648,14 +648,14 @@ def intersect3DRayWithDisk(
 
     # Firstly, we need to check the intersection between
     # the ray and the plane where the annulus is defined
-    t = wp.dot(origin - ray.origin, normal) / wp.dot(ray.direction, normal)
+    t = wp.dot(center - ray.origin, normal) / wp.dot(ray.direction, normal)
 
     if t < 0.:
         # Hit must be after ray origin
         return intersection
 
     planeIntersection = ray.origin + t * ray.direction
-    distanceToCenter  = wp.norm_l2(planeIntersection - origin)
+    distanceToCenter  = wp.norm_l2(planeIntersection - center)
 
     if (distanceToCenter <= radius):
         intersection.hit       = True
@@ -841,9 +841,176 @@ def intersect3DRayWithAsphericLens(
     localAxisOrigin = primitive.v0
     zAxisUnitVector = primitive.v1
 
+    # Length unit
+    u = wp.norm_l2(primitive.v1)
+
     # Before checking intersection, let's check
     # the bounding box that can be defined with
     # two disks and a cylinder.
+    
+    lowerBound = Primitive3D()
+    lowerBound.type = 6 # Disk
+    lowerBound.v0 = localAxisOrigin # Center
+    lowerBound.v1 = zAxisUnitVector # Normal, with radius as norm
+    y0 = primitive.f4 / primitive.f5
+
+    midstBound = Primitive3D()
+    midstBound.type = 1 # Cylinder
+    midstBound.v0 = localAxisOrigin # Center of basis
+    midstBound.v1 = wp.normalize(zAxisUnitVector) * y0 # Normal of basis, with height as norm
+    midstBound.f0 = wp.float32(u) # Radius
+
+    upperBound = Primitive3D()
+    upperBound.type = 6 # Disk
+    upperBound.v0 = localAxisOrigin + zAxisUnitVector # Center
+    upperBound.v1 = zAxisUnitVector # Normal, with radius as norm
+
+    # Testing bounding box intersection
+    closestPoint     = wp.vec3(wp.inf, wp.inf, wp.inf)
+    closestDistance  = wp.float32(wp.inf)
+    farthestPoint    = wp.vec3(wp.inf, wp.inf, wp.inf)
+    farthestDistance = wp.float32(wp.inf)
+
+    lowerIntersection = intersect3DRayWithDisk(ray, lowerBound)
+    if lowerIntersection.hit:
+        distance = wp.norm_l2(lowerIntersection.hitPoint - ray.origin)
+        if distance < closestDistance:
+            farthestPoint    = closestPoint
+            farthestDistance = closestDistance
+            closestPoint     = lowerIntersection.hitPoint
+            closestDistance  = distance
+        elif distance < farthestDistance:
+            farthestPoint    = lowerIntersection.hitPoint
+            farthestDistance = distance
+
+    midstIntersection = intersect3DRayWithCylinder(ray, midstBound)
+    if midstIntersection.hit:
+        distance = wp.norm_l2(midstIntersection.hitPoint - ray.origin)
+        if distance < closestDistance:
+            farthestPoint    = closestPoint
+            farthestDistance = closestDistance
+            closestPoint     = midstIntersection.hitPoint
+            closestDistance  = distance
+        elif distance < farthestDistance:
+            farthestPoint    = midstIntersection.hitPoint
+            farthestDistance = distance
+
+    upperIntersection = intersect3DRayWithDisk(ray, upperBound)
+    if upperIntersection.hit:
+        distance = wp.norm_l2(upperIntersection.hitPoint - ray.origin)
+        if distance < closestDistance:
+            farthestPoint    = closestPoint
+            farthestDistance = closestDistance
+            closestPoint     = upperIntersection.hitPoint
+            closestDistance  = distance
+        elif distance < farthestDistance:
+            farthestPoint    = upperIntersection.hitPoint
+            farthestDistance = distance
+
+    # Ray did not intersect lens
+    if closestDistance == wp.inf:
+        intersection = Intersection3D()
+        intersection.hit = False
+
+        return intersection
+
+    # Only one intersection occured
+    # with the bounding box: origin
+    # or ray is already inside.
+    elif farthestDistance == wp.inf:
+        farthestPoint = closestPoint
+        closestPoint  = ray.origin
+
+    # Intersection will be studied using the bisection method.
+    # Since we know the limits of the ray inside the bounding
+    # box, we can move along the ray and check if we're above
+    # or below the aspheric lens profile.
+
+    segmentOrigin = closestPoint
+    segmentVector = farthestPoint - closestPoint
+
+    # Mean value should be initialized first. If not,
+    # a strange behaviour may appear after while loop
+    # maybe due to obscure Warp optimization when the
+    # kernel compilation is made.
+    tMin  = wp.float32(0.0)
+    tMax  = wp.float32(1.0)
+    mean  = wp.float32(0.5)
+    rMean = wp.float32(0.0)
+    epsilon = 1.e-10; maxIter = 64; it = wp.int32(0.)
+    while (tMax - tMin) > epsilon and it < maxIter:
+        mean = (tMin + tMax) / 2.
+
+        # Let's compute the ray linear regression
+        linearRegtMin = segmentVector * tMin + segmentOrigin
+        linearRegMean = segmentVector * mean + segmentOrigin
+
+        linearRegtMinY = wp.dot(linearRegtMin - localAxisOrigin, zAxisUnitVector)
+        linearRegMeanY = wp.dot(linearRegMean - localAxisOrigin, zAxisUnitVector)
+
+        # To compute the aspheric lens profile, we need
+        # to project these two points on the local axis
+        # system of the aspheric lens.
+
+        # Point-to-axis distance (ie. [0..1], this is why we need another u at the denominator)
+        rMin  = wp.norm_l2(wp.cross(linearRegtMin - localAxisOrigin, zAxisUnitVector)) / (u * u)
+        rMean = wp.norm_l2(wp.cross(linearRegMean - localAxisOrigin, zAxisUnitVector)) / (u * u)
+
+        # Let's compute the aspheric lens profile
+        asphericProfiletMin = asphericLensProfile(rMin,
+            primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+            primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+        )
+        asphericProfileMean = asphericLensProfile(rMean,
+            primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+            primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+        )
+
+        # Let's compute the difference between the ray
+        # linear regression and aspheric lens profile.
+        difftMin = asphericProfiletMin - linearRegtMinY
+        diffMean = asphericProfileMean - linearRegMeanY
+
+        if (difftMin * diffMean <= 0.):
+            tMax = mean
+        else:
+            tMin = mean
+
+        it += 1
+
+    # Ensure final profile value is computed from the final, well-defined mean
+    # The explanation for this can be found in the comment above associated to
+    # the initilization of the 'mean' variable before the loop
+    hitPoint = segmentVector * mean + segmentOrigin
+
+    # Point-to-axis distance (ie. [0..1], thus why we need another u at the denominator)
+    rMean = wp.norm_l2(wp.cross(hitPoint - localAxisOrigin, zAxisUnitVector)) / (u * u)
+    asphericProfileMean = asphericLensProfile(rMean,
+        primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+        primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+    )
+
+    # 2D normal vector is computed analytically
+    normal2D = asphericLensProfileNormal(rMean,
+        primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+        primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+    )
+
+    zAxisVector = wp.normalize(zAxisUnitVector)
+    tAxisVector = wp.normalize(wp.cross(zAxisVector, wp.normalize(hitPoint - localAxisOrigin)))
+    hAxisVector = wp.normalize(wp.cross(tAxisVector, zAxisVector))
+    normal3D = wp.normalize(normal2D.x * hAxisVector + normal2D.y * zAxisVector)
+
+    ray.isAlive = True
+
+    intersection = Intersection3D()
+    intersection.hit = True
+    intersection.hitPoint  = hitPoint
+    intersection.normal    = normal3D
+    intersection.ray       = ray
+    intersection.primitive = primitive
+
+    return intersection
 
 @wp.func
 def intersect3DRayWithCylinderBlocker(
@@ -897,7 +1064,7 @@ def intersect3DRays(
         elif primitive.type == 2: # Spherical cap
             tempIntersection = intersect3DRayWithSphericalCap(ray, primitive)
         elif primitive.type == 3: # Aspheric lens
-            pass # tempIntersection = intersect3DRayWithAsphericLens(ray, primitive)
+            tempIntersection = intersect3DRayWithAsphericLens(ray, primitive)
         elif primitive.type == 4: # Cylinder blocker
             tempIntersection = intersect3DRayWithCylinderBlocker(ray, primitive)
         else:

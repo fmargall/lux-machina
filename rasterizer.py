@@ -1,6 +1,8 @@
 import warp as wp
 
-from structures import Intersection, Ray, Segment
+from structures import Intersection, Ray, Segment, \
+                       Intersection3D
+
 
 """
    Creates a segment from a ray and an intersection point
@@ -85,3 +87,16 @@ def rasterize(
 
         if hit:
             wp.atomic_add(imageBuffer, i, j, segment.f0)
+
+@wp.kernel
+def rasterize3D(
+    intersectionsBuffer: wp.array(dtype=Intersection3D, ndim=1),
+    nbParallelRays     : wp.int32,
+
+    imageBuffer      : wp.array(dtype=wp.float32, ndim=2)
+):
+    # Get pixel IDs
+    i, j = wp.tid()
+
+    imageBufferHeight = imageBuffer.shape[0]
+    imageBufferWidth  = imageBuffer.shape[1]
