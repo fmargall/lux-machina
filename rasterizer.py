@@ -105,7 +105,7 @@ def rasterize3D(
 
     # Rasterized image origin and scaling correction
     scaling = wp.float32(0.125)
-    shift2D = wp.vec2(-0.5, +0.10) * scaling
+    shift2D = wp.vec2(-0.5, +0.0125) * scaling
 
     imageBufferHeight = imageBuffer.shape[0]
     imageBufferWidth  = imageBuffer.shape[1]

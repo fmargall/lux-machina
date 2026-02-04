@@ -228,7 +228,7 @@ if __name__ == "__main__":
             
             # Rasterization. Slows down computation, 
             # uncomment to see 3D beam for debugging
-            """
+            
             # II.(ii) Rasterizing in 2D is useful for debugging
             wp.launch(
                 kernel  = rasterize3D,
@@ -259,7 +259,7 @@ if __name__ == "__main__":
             if cv2.waitKey(1) & 0xFF == ord('q'): 
                 breakRun = True
                 break
-            """
+            
             # IV. If all rays are dead, we can break the loop
             # We can also break if we have reached max depth.
             if onlyDeadRays or (longestRayDepth >= maximumRayDepth):

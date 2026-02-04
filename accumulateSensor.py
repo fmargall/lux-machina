@@ -165,4 +165,68 @@ def accumulateIdealPlenoptic3DSensor(
 
     plenopticSensorBuffer: wp.array(dtype=wp.float32, ndim=4)
 ):
-    pass
+    # Get spatial pixel IDs
+    spatialIDi, spatialIDj = wp.tid()
+    i, j = wp.float32(spatialIDi), wp.float32(spatialIDj)
+
+    nbPixelsTangent   = plenopticSensorBuffer.shape[0]
+    nbPixelsBitangent = plenopticSensorBuffer.shape[1]
+
+    sensorCenter   = sensor.v0
+    pixelTangent   = sensor.v1 / wp.float32(nbPixelsTangent)
+    pixelBitangent = sensor.v2 / wp.float32(nbPixelsBitangent)
+    sensorNormal   = wp.normalize(wp.cross(sensor.v1, sensor.v2))
+
+    u = (i + wp.float32(0.5) - wp.float32(nbPixelsTangent)   / wp.float32(2.))
+    v = (j + wp.float32(0.5) - wp.float32(nbPixelsBitangent) / wp.float32(2.))
+
+    # Get associated pixel parallelogram
+    pixel = Primitive3D()
+    pixel.type = 5 # Parallelogram
+    pixelCenter = sensorCenter + u * pixelTangent + v * pixelBitangent
+    pixel.v0 = pixelCenter - pixelTangent / wp.float32(2.) - pixelBitangent / wp.float32(2.)
+    pixel.v1 = pixelCenter + pixelTangent / wp.float32(2.) - pixelBitangent / wp.float32(2.)
+    pixel.v2 = pixelCenter + pixelTangent / wp.float32(2.) + pixelBitangent / wp.float32(2.)
+    pixel.v3 = pixelCenter - pixelTangent / wp.float32(2.) + pixelBitangent / wp.float32(2.)
+
+    for rayID in range(nbParallelRays):
+        ray = intersectionsBuffer[rayID].ray
+
+        atomicAddRay = False
+
+        intersect = intersect3DRayWithParallelogram(ray, pixel)
+        if intersect.hit:
+
+            # The infinite ray intersects the pixel parallelogram.
+            # We need to check if another intersection has occured
+            # before reaching the sensor.
+            if intersectionsBuffer[rayID].hit:
+                # Is the intersection point before the sensor along the ray?
+                distToHit    = wp.norm_l2(intersectionsBuffer[rayID].hitPoint - ray.origin)
+                distToSensor = wp.norm_l2(intersect.hitPoint - ray.origin)
+
+                if distToSensor < distToHit:
+                    atomicAddRay = True
+
+            else:
+                atomicAddRay = True
+
+        # Spatial pixel has been hit by the ray.
+        # Now we need to check which angular bin
+        # to increment.
+        if atomicAddRay:
+            # Convert ray direction to sensor local frame
+            x = wp.dot(ray.direction, wp.normalize(pixelTangent))
+            y = wp.dot(ray.direction, wp.normalize(pixelBitangent))
+            z = wp.dot(ray.direction, sensorNormal)
+
+            theta = wp.acos(z)
+            phi   = wp.atan2(y, x)
+            if phi < - wp.pi:
+                phi += 2. * wp.pi
+
+            # Get associated angular bin IDs
+            thetaID = wp.int32(wp.float32(plenopticSensorBuffer.shape[2]) * theta / (wp.pi / 2.))
+            phiID   = wp.int32(wp.float32(plenopticSensorBuffer.shape[3]) * phi   / (2. * wp.pi))
+
+            wp.atomic_add(plenopticSensorBuffer, wp.int32(i), wp.int32(j), thetaID, phiID, ray.energy)
