@@ -10,6 +10,8 @@ from generatePrimaryRays import generatePrimary3DRays
 from intersections       import intersect3DRays
 from propagations        import propagate3DRays
 
+from rasterizer import rasterize3D
+
 from structures import Intersection3D, LightSource3D, Primitive3D, Ray3D, Sensor3D
 
 if __name__ == "__main__":
@@ -18,15 +20,22 @@ if __name__ == "__main__":
 
     # 0. Light tracer parameters
     nbParallelRays  = 100_000
-    maximumRayDepth = 2
+    maximumRayDepth = 10
     timeSleep       = 0.
+
+    # Rasterizer parameters
+    width, height = 512, 512
+
+    # Initialising image buffer
+    rasterizerBuffer = wp.zeros((height, width), dtype=wp.float32)
+    img = rasterizerBuffer.numpy()
 
     # 0.(i) Light source initialisation
     lightSource = LightSource3D()
-    lightSource.type = 2 # Parallelogram Lambertian
+    lightSource.type = 1 # Parallelogram Lambertian
     lightSource.v0 = wp.vec3(0.   , 0.   , 0.) # Center
-    lightSource.v1 = wp.vec3(0.01796, 0.   , 0.) # Tangent
-    lightSource.v2 = wp.vec3(0.   , 0.01796, 0.) # Bitangent
+    lightSource.v1 = wp.vec3(0.003, 0.   , 0.) # Tangent
+    lightSource.v2 = wp.vec3(0.   , 0.003, 0.) # Bitangent
     lightSource.f0 = wp.float32(1.)
 
     lightSourcesBuffer = wp.array([lightSource], dtype=LightSource3D, ndim=1)
@@ -36,7 +45,7 @@ if __name__ == "__main__":
     
     # Aspheric lens
     nI = 1.0
-    nO = 1.51
+    nO = 1.52
     asphericLens00 = Primitive3D()
     asphericLens00.type = 2 # First surface of aspheric lens is a spherical cap
     asphericLens00.v0 = wp.vec3(0., 0.,  0.0718379) # Center of sphere
@@ -88,7 +97,7 @@ if __name__ == "__main__":
 
     biconvexLens11 = Primitive3D()
     biconvexLens11.type = 2 # third surface of biconvex lens is a spherical cap
-    biconvexLens11.v0 = wp.vec3(0., 0.,  0.0984) # Center of sphere
+    biconvexLens11.v0 = wp.vec3(0., 0., -0.0056) # Center of sphere
     biconvexLens11.v1 = wp.vec3(0., 0., +0.0592) # Direction of spherical cap pole, with radius as length
     biconvexLens11.f0 = wp.float32(0.447189) # Angle of the spherical cap: pi(/2) for an (hemi)sphere
     biconvexLens11.f1 = wp.float32(nI) # Refractive index in the +normal direction, ie. outside
@@ -97,9 +106,9 @@ if __name__ == "__main__":
     # Retaining rings
     retainingRing0 = Primitive3D()
     retainingRing0.type = 0 # Annulus blocker
-    retainingRing0.v0 = wp.vec3(0., 0., 0.04380) # Origin
+    retainingRing0.v0 = wp.vec3(0., 0., 0.04380) # Origin (0.04380)
     retainingRing0.v1 = wp.vec3(0., 0., 1.) # Normal
-    retainingRing0.f0 = wp.float32(0.02290) # Inner radius
+    retainingRing0.f0 = wp.float32(0.02290) # Inner radius (0.02290)
     retainingRing0.f1 = wp.float32(0.02540) # Outer radius
 
     retainingRing1 = Primitive3D()
@@ -113,12 +122,12 @@ if __name__ == "__main__":
     primitivesList.append(asphericLens01)
     primitivesList.append(asphericLens11)
 
-    #primitivesList.append(biconvexLens00)
-    #primitivesList.append(biconvexLens01)
-    #primitivesList.append(biconvexLens11)
+    primitivesList.append(biconvexLens00)
+    primitivesList.append(biconvexLens01)
+    primitivesList.append(biconvexLens11)
 
-    #primitivesList.append(retainingRing0)
-    #primitivesList.append(retainingRing1)
+    primitivesList.append(retainingRing0)
+    primitivesList.append(retainingRing1)
 
     primitivesBuffer = wp.array(primitivesList, dtype=Primitive3D, ndim=1)
     nbPrimitives     = wp.int32(len(primitivesList))
@@ -126,9 +135,9 @@ if __name__ == "__main__":
     # 0.(iii) Sensors initialization
     sensor = Sensor3D()
     sensor.type = 0 # Ideal 3D sensor
-    sensor.v0 = wp.vec3(0.0 , 0.0, 0.019) # Center (0.0536 for direct output after last primitive / 0.0653 for output after last mechanical support)
-    sensor.v1 = wp.vec3(0.0 , 0.026, 0.0   ) # Tangent (0.0508)
-    sensor.v2 = wp.vec3(0.026, 0.0 , 0.0  ) # Bitangent
+    sensor.v0 = wp.vec3(0.0 , 0.0, 1.0653) # Center (0.0536 for direct output after last primitive / 0.0653 for output after last mechanical support)
+    sensor.v1 = wp.vec3(0.0 , 0.4208, 0.0   ) # Tangent (0.0508)
+    sensor.v2 = wp.vec3(0.4208, 0.0 , 0.0  ) # Bitangent
     sensor.i0 = wp.int32(256) # Number of pixels on the tangential axis
 
     # Initializing sensor buffer
@@ -158,6 +167,7 @@ if __name__ == "__main__":
     # The first infinite while loop concerns each 
     # initial ray generation, directly from light
     # sources
+    previousTime = time.time()
     nbIterations = 0
     while True:
         nbIterations += nbParallelRays
@@ -180,6 +190,7 @@ if __name__ == "__main__":
         # then rasterize and accumulate, checks dead rays, and
         # continue or close the loop
         longestRayDepth = 0
+        breakRun = False # To break outer loop if is required.
         while True:
 
             # II. Compute intersections of rays with scene
@@ -209,20 +220,46 @@ if __name__ == "__main__":
             fig.canvas.restore_region(background)
 
             imgPlot.set_data(sensorDataNorm.T)
-
+            
             # Redraw minimal
             ax.draw_artist(imgPlot)
             fig.canvas.blit(ax.bbox)
             fig.canvas.flush_events()
-
-            # II.(ii) Rasterizing in 2D is too useful for debugging
+            
+            # Rasterization. Slows down computation, 
+            # uncomment to see 3D beam for debugging
+            """
+            # II.(ii) Rasterizing in 2D is useful for debugging
             wp.launch(
                 kernel  = rasterize3D,
                 dim     = rasterizerBuffer.shape,
-                inputs  = [intersectionsBuffer, nbParallelRays, rasterizer],
+                inputs  = [intersectionsBuffer, nbParallelRays],
                 outputs = [rasterizerBuffer]
             )
 
+            # III.(ii) Accumulating and normalizing the image buffer
+            img = (img * (nbIterations - nbParallelRays) + rasterizerBuffer.numpy()) / nbIterations
+
+            # III.(iii) Once accumulated, we can display the current image
+
+            # Computing current RPS
+            currentTime = time.time()
+            rps = nbParallelRays / (currentTime - previousTime)
+            previousTime = currentTime
+
+            # Show everything on screen
+            imgNorm = img / img.max()
+            cv2.putText(imgNorm, f"RPS: {rps:.2f}"      , (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(imgNorm, f"Rays: {nbIterations}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.imshow("FiatLux!", imgNorm)
+            
+            # Check for quitting the application
+            # CAUTION: This block NEEDS to be be
+            # called BEFORE any break statement!
+            if cv2.waitKey(1) & 0xFF == ord('q'): 
+                breakRun = True
+                break
+            """
             # IV. If all rays are dead, we can break the loop
             # We can also break if we have reached max depth.
             if onlyDeadRays or (longestRayDepth >= maximumRayDepth):
@@ -239,3 +276,6 @@ if __name__ == "__main__":
             longestRayDepth += 1
 
             time.sleep(timeSleep)
+
+        if breakRun: 
+            break

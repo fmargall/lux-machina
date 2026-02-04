@@ -96,7 +96,7 @@ def generateRayFrom3DLambertianSource(
 
     # Hemisphere cosine-weighted sampling
     # since the source is Lambertian here
-    theta =  wp.acos(wp.sqrt(randTheta))
+    theta = wp.acos(wp.sqrt(1. - randTheta))
     phi   = randPhi * 6.283185307179586
     
     direction = wp.sin(theta) * wp.cos(phi) * wp.normalize(lightTangent)   \

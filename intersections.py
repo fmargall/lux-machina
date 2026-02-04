@@ -647,7 +647,7 @@ def intersect3DRayWithDisk(
     intersection.hit = False
 
     # Firstly, we need to check the intersection between
-    # the ray and the plane where the annulus is defined
+    # the ray and the plane where the disk is defined
     t = wp.dot(center - ray.origin, normal) / wp.dot(ray.direction, normal)
 
     if t < 0.:
@@ -857,12 +857,12 @@ def intersect3DRayWithAsphericLens(
     midstBound = Primitive3D()
     midstBound.type = 1 # Cylinder
     midstBound.v0 = localAxisOrigin # Center of basis
-    midstBound.v1 = wp.normalize(zAxisUnitVector) * y0 # Normal of basis, with height as norm
+    midstBound.v1 = zAxisUnitVector * y0 # Normal of basis, with height as norm
     midstBound.f0 = wp.float32(u) # Radius
 
     upperBound = Primitive3D()
     upperBound.type = 6 # Disk
-    upperBound.v0 = localAxisOrigin + zAxisUnitVector # Center
+    upperBound.v0 = localAxisOrigin + zAxisUnitVector * y0 # Center
     upperBound.v1 = zAxisUnitVector # Normal, with radius as norm
 
     # Testing bounding box intersection
@@ -921,7 +921,7 @@ def intersect3DRayWithAsphericLens(
         farthestPoint = closestPoint
         closestPoint  = ray.origin
 
-    # Intersection will be studied using the bisection method.
+    # Intersection will be studied using the bisection method
     # Since we know the limits of the ray inside the bounding
     # box, we can move along the ray and check if we're above
     # or below the aspheric lens profile.
@@ -936,7 +936,35 @@ def intersect3DRayWithAsphericLens(
     tMin  = wp.float32(0.0)
     tMax  = wp.float32(1.0)
     mean  = wp.float32(0.5)
+    rMin  = wp.float32(0.0)
     rMean = wp.float32(0.0)
+
+    # Last test before bisection method should be to check if
+    # only the bounding box is hit, but not the aspheric lens
+    pMin = segmentVector * tMin + segmentOrigin
+    pMax = segmentVector * tMax + segmentOrigin
+
+    yMin = wp.dot(pMin - localAxisOrigin, zAxisUnitVector) / (u * u)
+    yMax = wp.dot(pMax - localAxisOrigin, zAxisUnitVector) / (u * u)
+
+    rMinTest = wp.norm_l2(wp.cross(pMin - localAxisOrigin, zAxisUnitVector)) / (u * u)
+    rMaxTest = wp.norm_l2(wp.cross(pMax - localAxisOrigin, zAxisUnitVector)) / (u * u)
+
+    fMin = asphericLensProfile(rMinTest,
+        primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+        primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+    ) - yMin
+
+    fMax = asphericLensProfile(rMaxTest,
+        primitive.f0, primitive.f1, primitive.f4, primitive.f5,
+        primitive.f6, primitive.f7, primitive.f8, primitive.f9, primitive.f10
+    ) - yMax
+
+    if fMin * fMax > 0.:
+        intersection = Intersection3D()
+        intersection.hit = False
+        return intersection
+
     epsilon = 1.e-10; maxIter = 64; it = wp.int32(0.)
     while (tMax - tMin) > epsilon and it < maxIter:
         mean = (tMin + tMax) / 2.
@@ -945,8 +973,9 @@ def intersect3DRayWithAsphericLens(
         linearRegtMin = segmentVector * tMin + segmentOrigin
         linearRegMean = segmentVector * mean + segmentOrigin
 
-        linearRegtMinY = wp.dot(linearRegtMin - localAxisOrigin, zAxisUnitVector)
-        linearRegMeanY = wp.dot(linearRegMean - localAxisOrigin, zAxisUnitVector)
+        # By definition of the local axis system, should be between 0 and y0 / N
+        linearRegtMinY = wp.dot(linearRegtMin - localAxisOrigin, zAxisUnitVector) / (u * u)
+        linearRegMeanY = wp.dot(linearRegMean - localAxisOrigin, zAxisUnitVector) / (u * u)
 
         # To compute the aspheric lens profile, we need
         # to project these two points on the local axis

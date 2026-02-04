@@ -88,6 +88,11 @@ def rasterize(
         if hit:
             wp.atomic_add(imageBuffer, i, j, segment.f0)
 
+"""
+   For now, 3D rasterization only works by removing the X axis,
+   ie making an orthographic projection on the YZ plane for all
+   rays.
+"""
 @wp.kernel
 def rasterize3D(
     intersectionsBuffer: wp.array(dtype=Intersection3D, ndim=1),
@@ -98,5 +103,50 @@ def rasterize3D(
     # Get pixel IDs
     i, j = wp.tid()
 
+    # Rasterized image origin and scaling correction
+    scaling = wp.float32(0.125)
+    shift2D = wp.vec2(-0.5, +0.10) * scaling
+
     imageBufferHeight = imageBuffer.shape[0]
     imageBufferWidth  = imageBuffer.shape[1]
+
+    halfDeltaX = wp.float32(scaling) / (2. * wp.float32(imageBufferHeight))
+    halfDeltaY = wp.float32(scaling) / (2. * wp.float32(imageBufferHeight))
+
+    # Careful: since i is the rowID and j colID,
+    # i defines the position on y, then j on x.
+    pixelCenter = wp.vec2(
+                            scaling * (wp.float32(j) / wp.float32(imageBufferHeight)) + halfDeltaX,
+        scaling * (wp.float32(imageBufferHeight - i) / wp.float32(imageBufferHeight)) + halfDeltaY
+    )
+
+    p00 = pixelCenter + wp.vec2(-halfDeltaX, -halfDeltaY) + shift2D;
+    p01 = pixelCenter + wp.vec2(-halfDeltaX,  halfDeltaY) + shift2D;
+    p10 = pixelCenter + wp.vec2( halfDeltaX, -halfDeltaY) + shift2D;
+    p11 = pixelCenter + wp.vec2( halfDeltaX,  halfDeltaY) + shift2D;
+
+    for ID in range(nbParallelRays):
+        ray3D = intersectionsBuffer[ID].ray
+        hit3D = intersectionsBuffer[ID].hitPoint
+
+        if not intersectionsBuffer[ID].hit:
+            hit3D = ray3D.origin + 1.e3 * ray3D.direction
+
+        hit2D = wp.vec2(hit3D.y, hit3D.z)
+        ray2D = Ray()
+        ray2D.isAlive   = ray3D.isAlive
+        ray2D.origin    = wp.vec2(ray3D.origin.y, ray3D.origin.z)
+        ray2D.direction = wp.vec2(ray3D.direction.y, ray3D.direction.z)
+        ray2D.depth     = ray3D.depth
+        ray2D.energy    = ray3D.energy
+
+        segment = Segment(ray2D.origin, hit2D, ray2D.energy)
+        hit = False
+
+        if doSegmentsIntersect(segment, Segment(p00, p10, 1.)): hit = True
+        if doSegmentsIntersect(segment, Segment(p10, p11, 1.)): hit = True
+        if doSegmentsIntersect(segment, Segment(p11, p01, 1.)): hit = True
+        if doSegmentsIntersect(segment, Segment(p01, p00, 1.)): hit = True
+
+        if hit:
+            wp.atomic_add(imageBuffer, i, j, segment.f0)
