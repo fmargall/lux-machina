@@ -248,6 +248,12 @@ class Sensor:
       # Pixels are squares, so number of pixels on the bitangential axis is deduced from latter)
     - i1: wp.int32 (Number of angular bins over zenithal  angle for each spatial pixel)
     - i2: wp.int32 (Number of angular bins over azimuthal angle for each spatial pixel)
+   2: Ideal plenoptic 3D Fibonacci circular sensor. Requires:
+    - v0: wp.vec3    (Center)
+    - v1: wp.vec3    (Normal) # NOT normalized. Its length gives the radius of the sensor surface
+    - i0: wp.int32   (Number of spatial bins on the sensor surface)
+    - i1: wp.int32   (Number of angular bins, for each spatial bin)
+    - f0: wp.float32 ()
 """
 @wp.struct
 class Sensor3D:
