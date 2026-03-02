@@ -230,3 +230,19 @@ def accumulateIdealPlenoptic3DSensor(
             phiID   = wp.int32(wp.float32(plenopticSensorBuffer.shape[3]) * phi   / (2. * wp.pi))
 
             wp.atomic_add(plenopticSensorBuffer, wp.int32(i), wp.int32(j), thetaID, phiID, ray.energy)
+
+@wp.kernel
+def accumulatePlenopticFibonacci3DSensor(
+    intersectionsBuffer: wp.array(dtype=Intersection3D, ndim=1),
+    sensor             : Sensor3D,
+
+    plenopticSensorBuffer: wp.array(dtype=wp.float32, ndim=2)
+):
+    # The following kernel will be parallelized over the input rays,
+    # and then for each we will check first if it touches the sensor
+    # if yes, we will check which spatial bin is touched, then which
+    # angular bin is touched.
+    rayID = wp.tid()
+    ray   = intersectionsBuffer[rayID].ray
+
+    # Let's check if the ray touches the sensor

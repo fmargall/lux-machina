@@ -253,7 +253,7 @@ class Sensor:
     - v1: wp.vec3    (Normal) # NOT normalized. Its length gives the radius of the sensor surface
     - i0: wp.int32   (Number of spatial bins on the sensor surface)
     - i1: wp.int32   (Number of angular bins, for each spatial bin)
-    - f0: wp.float32 ()
+    - f0: wp.float32 (Angular cap limit for the angular bins: leave it at pi/2 for the hemisphere)
 """
 @wp.struct
 class Sensor3D:
