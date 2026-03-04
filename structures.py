@@ -250,7 +250,8 @@ class Sensor:
     - i2: wp.int32 (Number of angular bins over azimuthal angle for each spatial pixel)
    2: Ideal plenoptic 3D Fibonacci circular sensor. Requires:
     - v0: wp.vec3    (Center)
-    - v1: wp.vec3    (Normal) # NOT normalized. Its length gives the radius of the sensor surface
+    - v1: wp.vec3    (Normal)  # NOT normalized. Its length gives the radius of the sensor surface
+    - v2: wp.vec3    (Tangent) # NOT normalized. Gives the axis to define null angle on the sensor
     - i0: wp.int32   (Number of spatial bins on the sensor surface)
     - i1: wp.int32   (Number of angular bins, for each spatial bin)
     - f0: wp.float32 (Angular cap limit for the angular bins: leave it at pi/2 for the hemisphere)
@@ -264,3 +265,4 @@ class Sensor3D:
     i0  : wp.int32
     i1  : wp.int32
     i2  : wp.int32
+    f0  : wp.float32

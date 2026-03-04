@@ -1,6 +1,6 @@
 import warp as wp
 
-from intersections import intersect3DRayWithParallelogram
+from intersections import intersect3DRayWithDisk, intersect3DRayWithParallelogram
 from structures    import Intersection  , Ray  , Segment    , Sensor, \
                           Intersection3D, Ray3D, Primitive3D, Sensor3D
 
@@ -245,4 +245,31 @@ def accumulatePlenopticFibonacci3DSensor(
     rayID = wp.tid()
     ray   = intersectionsBuffer[rayID].ray
 
-    # Let's check if the ray touches the sensor
+    # Get the sensor's surface
+    sensorDisk = Primitive3D()
+    sensorDisk.type = 6 # 6th type stands for Disk
+    sensorDisk.v0 = sensor.v0
+    sensorDisk.v1 = sensor.v1
+
+    # Check if ray hits sensor
+    intersection = intersect3DRayWithDisk(ray, sensorDisk)
+
+    if intersection.hit:
+        # We need to get the disk coordinates of the hitpoint
+        hitOnPlane = intersection.hitPoint - sensor.v0
+        x = sensor.v2
+        y = wp.cross(sensor.v1, sensor.v2) # y = z /\ x
+        u = wp.dot(hitOnPlane, x)
+        v = wp.dot(hitOnPlane, y)
+
+        rho   = wp.norm_l2(hitOnPlane)
+        theta = wp.atan2(v, u)
+
+        # We need to find the k closest bins of the Fibonacci pattern
+        # and measure their distance to save for each a weighted ray.
+        k = 3 # Arbitrarly chosen
+
+        # We can make the following conjecture that the distance to
+        # the k-th closest neighbour for N points is always smaller
+        # than sqrt(k / N)
+        N = sensor.i0
