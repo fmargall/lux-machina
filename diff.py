@@ -106,52 +106,21 @@ def transformEmitterSystem(
         emitterPrimitivesWorldBuffer[primitiveID] = pWorld
 
 @wp.kernel
-def computeMax(
-    image : wp.array(dtype=wp.float32, ndim=2),
-    maxVal: wp.array(dtype=wp.float32, ndim=1)
-):
-    i, j = wp.tid()
-
-    val = image[i, j]
-
-    wp.atomic_max(maxVal, 0, val)
-
-@wp.kernel
-def normalizeImage(
-    image: wp.array(dtype=wp.float32, ndim=2),
-    maxVal: wp.array(dtype=wp.float32, ndim=1),
-    normalized: wp.array(dtype=wp.float32, ndim=2)
-):
-    i, j = wp.tid()
-
-    m = maxVal[0]
-
-    if m > 0.0:
-        normalized[i, j] = image[i, j] / (m + 1e-6)
-    else:
-        normalized[i, j] = image[i, j]
-
-@wp.kernel
 def computeLoss(
     sensor: wp.array(dtype=wp.float32, ndim=2),
     reference: wp.array(dtype=wp.float32, ndim=2),
-    maxVal: wp.array(dtype=wp.float32, ndim=1),
     loss: wp.array(dtype=wp.float32, ndim=1)
 ):
     i, j = wp.tid()
 
-    m = maxVal[0] + 1e-6
-
-    sim = sensor[i, j] / m
-    ref = reference[i, j]
-
-    diff = sim - ref
+    diff = sensor[i, j] - reference[i, j]
 
     wp.atomic_add(loss, 0, diff * diff)
 
 if __name__ == "__main__":
     wp.init()
     wp.config.verbose = True # Better to check potentiel problems
+    wp.config.verify_autograd_array_access=True # Better to check potential problems
 
     # Initialisation
 
@@ -181,6 +150,7 @@ if __name__ == "__main__":
 
     lightSourcesList = [lightSource]
 
+    """
     # Aspheric lens
     nI = 1.0
     nO = 1.52
@@ -255,8 +225,11 @@ if __name__ == "__main__":
     retainingRing1.v1 = wp.vec3(0., 0., 1.) # Normal
     retainingRing1.f0 = wp.float32(0.02290) # Inner radius
     retainingRing1.f1 = wp.float32(0.02540) # Outer radius
+    """
 
     primitivesList = []
+    
+    """
     primitivesList.append(asphericLens00)
     primitivesList.append(asphericLens01)
     primitivesList.append(asphericLens11)
@@ -267,6 +240,7 @@ if __name__ == "__main__":
 
     primitivesList.append(retainingRing0)
     primitivesList.append(retainingRing1)
+    """
 
     # Initializing buffers
     emitterLightSourcesLocalBuffer = wp.array(lightSourcesList, dtype=LightSource3D)
@@ -286,7 +260,6 @@ if __name__ == "__main__":
 
     # Reference initialization
     referenceImage = np.load("reference_sensor.npy")
-    referenceImage = referenceImage / np.max(referenceImage) # Normalize
     referenceBuffer = wp.array(referenceImage, dtype=wp.float32)
 
     plotSensor = True
@@ -367,20 +340,6 @@ if __name__ == "__main__":
                     outputs = [sensorBuffer]
                 )
 
-                if plotSensor:
-                    nbIterations   = (iterationID + 1) * nbParallelRays
-                    sensorData     = (sensorData * (nbIterations - nbParallelRays) + sensorBuffer.numpy()) / nbIterations
-                    sensorDataNorm =  sensorData / np.max(sensorData) if np.max(sensorData) > 0 else sensorData
-
-                    fig.canvas.restore_region(background)
-
-                    imgPlot.set_data(sensorDataNorm.T)
-            
-                    # Redraw minimal
-                    ax.draw_artist(imgPlot)
-                    fig.canvas.blit(ax.bbox)
-                    fig.canvas.flush_events()
-
                 # Propagate rays
                 wp.launch(
                     kernel  = propagate3DRays,
@@ -389,20 +348,10 @@ if __name__ == "__main__":
                     outputs = [raysBuffer]
                 )
 
-            # Right before computing the loss, we need to normalize the result
-            maxBuffer = wp.zeros(1, dtype=wp.float32)
-
-            wp.launch(
-                computeMax,
-                dim=sensorBuffer.shape,
-                inputs=[sensorBuffer],
-                outputs=[maxBuffer]
-            )
-
             wp.launch(
                 computeLoss,
                 dim=sensorBuffer.shape,
-                inputs=[sensorBuffer, referenceBuffer, maxBuffer],
+                inputs=[sensorBuffer, referenceBuffer],
                 outputs=[lossBuffer]
             )
         
@@ -425,3 +374,17 @@ if __name__ == "__main__":
         print("Iteration", iterationID, "loss", loss)
         print("Gradient:", grad)
         print("Optimized pose:", pose)
+
+        if plotSensor:
+            nbIterations   = (iterationID + 1) * nbParallelRays
+            sensorData     = (sensorData * (nbIterations - nbParallelRays) + sensorBuffer.numpy()) / nbIterations
+            sensorDataNorm =  sensorData / np.max(sensorData) if np.max(sensorData) > 0 else sensorData
+
+            fig.canvas.restore_region(background)
+
+            imgPlot.set_data(sensorDataNorm.T)
+            
+            # Redraw minimal
+            ax.draw_artist(imgPlot)
+            fig.canvas.blit(ax.bbox)
+            fig.canvas.flush_events()
