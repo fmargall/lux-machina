@@ -259,10 +259,46 @@ class Sensor:
 @wp.struct
 class Sensor3D:
     type: wp.int32
-    v0  : wp.vec3
-    v1  : wp.vec3
-    v2  : wp.vec3
+    v0  : wp.vec3f
+    v1  : wp.vec3f
+    v2  : wp.vec3f
     i0  : wp.int32
     i1  : wp.int32
     i2  : wp.int32
     f0  : wp.float32
+
+@wp.struct
+class CameraModel:
+    type: wp.int32   # Only 0 for OpenCV pinhole
+
+    i0  : wp.int32   # Width  (number of pixels)
+    i1  : wp.int32   # Height (number of pixels)
+
+    # Intrinsics
+    f0  : wp.float32 # fx
+    f1  : wp.float32 # fy
+    f2  : wp.float32 # cx
+    f3  : wp.float32 # cy
+
+    # Extrinsics
+    m0  : wp.mat33f  # R
+    v0  : wp.vec3f   # t
+
+    # Radial distortion
+    f4  : wp.float32 # k1
+    f5  : wp.float32 # k2
+    f6  : wp.float32 # k3
+    f7  : wp.float32 # k4
+    f8  : wp.float32 # k5
+    f9  : wp.float32 # k6
+
+    # Tangential distortion
+    f10 : wp.float32 # p1
+    f11 : wp.float32 # p2
+
+    # Thin prism distortion
+    f12 : wp.float32 # s1
+    f13 : wp.float32 # s2
+    f14 : wp.float32 # s3
+    f15 : wp.float32 # s4
+
