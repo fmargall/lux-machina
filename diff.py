@@ -1,6 +1,8 @@
 import warp as wp
 
-from structures import LightSource3D, Primitive3D, Sensor3D
+from generatePrimaryRays import generatePrimary3DRays
+
+from structures import LightSource3D, Primitive3D, Ray3D, Sensor3D
 
 
 @wp.func
@@ -233,10 +235,12 @@ if __name__ == "__main__":
     sensor.i0 = wp.int32(256)
 
     maxDepth = 10
+    nbParallelRays = 100_000
+
     nbOptimIterations = 10
     learningRate = 1.e-4
 
-    for iteration in range(nbOptimIterations):
+    for iterationID in range(nbOptimIterations):
 
         # The Tape class will be used to record kernel launches, and replay them to
         # compute the gradient of a scalar loss function with respect to our inputs
@@ -255,18 +259,19 @@ if __name__ == "__main__":
                 dim     = 1,
                 inputs  = [poseParams, len(lightSourcesList), len(primitivesList), 
                            emitterLightSourcesLocalBuffer, emitterPrimitivesLocalBuffer],
-                outputs = [emitterLightSourcesLocalBuffer, emitterPrimitivesWorldBuffer]
+                outputs = [emitterLightSourcesWorldBuffer, emitterPrimitivesWorldBuffer]
             )
 
-            """
-            # Generate primary rays from light sources
+            # Generate primary rays from light sources buffer
+            raysBuffer = wp.zeros(nbParallelRays, dtype=Ray3D)
             wp.launch(
-                kernel  =
-                dim     =
-                inputs  =
-                outputs =
+                kernel  = generatePrimary3DRays,
+                dim     = nbParallelRays,
+                inputs  = [iterationID, emitterLightSourcesWorldBuffer],
+                outputs = [raysBuffer]
             )
-
+            
+            """
             # Ray tracing
             for depth in range(maxDepth):
                 # Intersect rays
