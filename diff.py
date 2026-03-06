@@ -1,12 +1,17 @@
-import warp as wp
+import matplotlib.pyplot as plt
+import numpy as np
+import warp  as wp
 
+from accumulateSensor    import accumulateIdeal3DSensor
 from generatePrimaryRays import generatePrimary3DRays
+from intersections       import intersect3DRays
+from propagations        import propagate3DRays
 
-from structures import LightSource3D, Primitive3D, Ray3D, Sensor3D
+from structures import Intersection3D, LightSource3D, Primitive3D, Ray3D, Sensor3D
 
 
 @wp.func
-def rotateVec(v: wp.vec3f, theta: wp.float32, phi: wp.float32, psi: wp.float32):
+def rotateVec(v: wp.vec3f, theta: wp.float32, phi: wp.float32, psi: wp.float32) -> wp.vec3f:
     cth = wp.cos(theta)
     sth = wp.sin(theta)
 
@@ -31,7 +36,7 @@ def rotateVec(v: wp.vec3f, theta: wp.float32, phi: wp.float32, psi: wp.float32):
     y3 =  sps * x2 + cps * y2
     z3 =  z2
 
-    return wp.vec3(x3, y3, z3)
+    return wp.vec3f(x3, y3, z3)
 
 @wp.kernel
 def transformEmitterSystem(
@@ -100,6 +105,49 @@ def transformEmitterSystem(
 
         emitterPrimitivesWorldBuffer[primitiveID] = pWorld
 
+@wp.kernel
+def computeMax(
+    image : wp.array(dtype=wp.float32, ndim=2),
+    maxVal: wp.array(dtype=wp.float32, ndim=1)
+):
+    i, j = wp.tid()
+
+    val = image[i, j]
+
+    wp.atomic_max(maxVal, 0, val)
+
+@wp.kernel
+def normalizeImage(
+    image: wp.array(dtype=wp.float32, ndim=2),
+    maxVal: wp.array(dtype=wp.float32, ndim=1),
+    normalized: wp.array(dtype=wp.float32, ndim=2)
+):
+    i, j = wp.tid()
+
+    m = maxVal[0]
+
+    if m > 0.0:
+        normalized[i, j] = image[i, j] / (m + 1e-6)
+    else:
+        normalized[i, j] = image[i, j]
+
+@wp.kernel
+def computeLoss(
+    sensor: wp.array(dtype=wp.float32, ndim=2),
+    reference: wp.array(dtype=wp.float32, ndim=2),
+    maxVal: wp.array(dtype=wp.float32, ndim=1),
+    loss: wp.array(dtype=wp.float32, ndim=1)
+):
+    i, j = wp.tid()
+
+    m = maxVal[0] + 1e-6
+
+    sim = sensor[i, j] / m
+    ref = reference[i, j]
+
+    diff = sim - ref
+
+    wp.atomic_add(loss, 0, diff * diff)
 
 if __name__ == "__main__":
     wp.init()
@@ -234,10 +282,39 @@ if __name__ == "__main__":
     sensor.v2 = wp.vec3(0.1208, 0.0 , 0.0  ) # Bitangent
     sensor.i0 = wp.int32(256)
 
-    maxDepth = 10
+    sensorPixelsBitangent = sensor.i0 * wp.norm_l2(sensor.v2) / wp.norm_l2(sensor.v1)
+
+    # Reference initialization
+    referenceImage = np.load("reference_sensor.npy")
+    referenceImage = referenceImage / np.max(referenceImage) # Normalize
+    referenceBuffer = wp.array(referenceImage, dtype=wp.float32)
+
+    plotSensor = True
+    # Initializing sensor figure
+    if plotSensor:
+        sensorData = np.zeros((sensor.i0, int(sensorPixelsBitangent)))
+        fig, ax = plt.subplots()
+        imgPlot = ax.imshow(
+            sensorData, 
+            origin="lower",
+            aspect="equal",
+            interpolation="nearest",
+            cmap='gray', 
+            vmin=0., 
+            vmax=1.
+        )
+
+        ax.set_title("Sensor")
+
+        fig.canvas.draw()
+        background = fig.canvas.copy_from_bbox(ax.bbox)
+
+        plt.show(block=False)
+
+    maxDepth = 5
     nbParallelRays = 100_000
 
-    nbOptimIterations = 10
+    nbOptimIterations = 100
     learningRate = 1.e-4
 
     for iterationID in range(nbOptimIterations):
@@ -247,9 +324,8 @@ if __name__ == "__main__":
         tape = wp.Tape()
 
         # Initializing loss and sensor buffers
-        sensorPixelsBitangent = sensor.i0 * wp.norm_l2(sensor.v2) / wp.norm_l2(sensor.v1)
         sensorBuffer = wp.zeros((sensor.i0, sensorPixelsBitangent), dtype=wp.float32)
-        lossBuffer = wp.zeros(1, dtype=wp.float32)
+        lossBuffer = wp.zeros(1, dtype=wp.float32, requires_grad=True)
 
         with tape:
 
@@ -271,52 +347,81 @@ if __name__ == "__main__":
                 outputs = [raysBuffer]
             )
             
-            """
             # Ray tracing
             for depth in range(maxDepth):
                 # Intersect rays
+                raysStatusBuffer    = wp.zeros((nbParallelRays,), dtype=wp.bool)
+                intersectionsBuffer = wp.zeros((nbParallelRays,), dtype=Intersection3D)
                 wp.launch(
-                    kernel  =
-                    dim     =
-                    inputs  =
-                    outputs =
+                    kernel  = intersect3DRays,
+                    dim     = nbParallelRays,
+                    inputs  = [raysBuffer, emitterPrimitivesWorldBuffer, len(primitivesList)],
+                    outputs = [intersectionsBuffer, raysStatusBuffer]
                 )
-
+                
                 # Accumulate
                 wp.launch(
-                    kernel  =
-                    dim     =
-                    inputs  =
-                    outputs =
+                    kernel  = accumulateIdeal3DSensor,
+                    dim     = sensorBuffer.shape,
+                    inputs  = [intersectionsBuffer, nbParallelRays, sensor],
+                    outputs = [sensorBuffer]
                 )
+
+                if plotSensor:
+                    nbIterations   = (iterationID + 1) * nbParallelRays
+                    sensorData     = (sensorData * (nbIterations - nbParallelRays) + sensorBuffer.numpy()) / nbIterations
+                    sensorDataNorm =  sensorData / np.max(sensorData) if np.max(sensorData) > 0 else sensorData
+
+                    fig.canvas.restore_region(background)
+
+                    imgPlot.set_data(sensorDataNorm.T)
+            
+                    # Redraw minimal
+                    ax.draw_artist(imgPlot)
+                    fig.canvas.blit(ax.bbox)
+                    fig.canvas.flush_events()
 
                 # Propagate rays
                 wp.launch(
-                    kernel  =
-                    dim     =
-                    inputs  =
-                    outputs =
+                    kernel  = propagate3DRays,
+                    dim     = nbParallelRays,
+                    inputs  = [intersectionsBuffer, iterationID],
+                    outputs = [raysBuffer]
                 )
 
-                # Compute loss
-                wp.launch(
-                    kernel  =
-                    dim     =
-                    inputs  =
-                    outputs =
-                )
+            # Right before computing the loss, we need to normalize the result
+            maxBuffer = wp.zeros(1, dtype=wp.float32)
+
+            wp.launch(
+                computeMax,
+                dim=sensorBuffer.shape,
+                inputs=[sensorBuffer],
+                outputs=[maxBuffer]
+            )
+
+            wp.launch(
+                computeLoss,
+                dim=sensorBuffer.shape,
+                inputs=[sensorBuffer, referenceBuffer, maxBuffer],
+                outputs=[lossBuffer]
+            )
         
         tape.backward(lossBuffer)
         
-        # Gradient descent
-        poseParamsNp = poseParams.numpy()
-        gradientNp   = poseParams.grad.numpy()
-        
-        poseParamsNp -= learningRate * gradientNp
-        poseParams.assign(poseParamsNp)
+        loss = lossBuffer.numpy()[0]
 
+        # Lire les gradients
+        grad = poseParams.grad.numpy()
+
+        # Descente de gradient
+        pose = poseParams.numpy()
+        pose -= learningRate * grad
+
+        poseParams.assign(pose)
+
+        # Très important : reset des gradients
         poseParams.grad.zero_()
 
-        print("Iteration", iteration, "loss", lossBuffer.numpy())
-        print("Optimized pose:", poseParams.numpy())
-        """
+        print("Iteration", iterationID, "loss", loss)
+        print("Gradient:", grad)
+        print("Optimized pose:", pose)

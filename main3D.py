@@ -17,6 +17,7 @@ from structures import Intersection3D, LightSource3D, Primitive3D, Ray3D, Sensor
 if __name__ == "__main__":
     # GPU support using NVIDIA Warp
     wp.init()
+    wp.config.verbose = True
 
     # 0. Light tracer parameters
     nbParallelRays  = 100_000
@@ -135,15 +136,22 @@ if __name__ == "__main__":
     # 0.(iii) Sensors initialization
     sensor = Sensor3D()
     sensor.type = 0 # Ideal 3D sensor
-    sensor.v0 = wp.vec3(0.0 , 0.0, 1.0653) # Center (0.0536 for direct output after last primitive / 0.0653 for output after last mechanical support)
-    sensor.v1 = wp.vec3(0.0 , 0.4208, 0.0   ) # Tangent (0.0508)
-    sensor.v2 = wp.vec3(0.4208, 0.0 , 0.0  ) # Bitangent
+    sensor.v0 = wp.vec3(0.0 , 0.0, 0.5653) # Center (0.0536 for direct output after last primitive / 0.0653 for output after last mechanical support)
+    sensor.v1 = wp.vec3(0.0 , 0.1208, 0.0   ) # Tangent (0.0508) (at 1 meter : 0.4208)
+    sensor.v2 = wp.vec3(0.1208, 0.0 , 0.0  ) # Bitangent
     sensor.i0 = wp.int32(256) # Number of pixels on the tangential axis
 
     # Initializing sensor buffer
     sensorPixelsBitangent = sensor.i0 * wp.norm_l2(sensor.v2) / wp.norm_l2(sensor.v1)
     sensorBuffer = wp.zeros((sensor.i0, sensorPixelsBitangent), dtype=wp.float32)
     sensorData   = sensorBuffer.numpy()
+
+    saveAndExit = False # Used to save data
+    def on_close(event):
+        global saveAndExit, sensorData
+        print("Saving reference sensor image...")
+        np.save("reference_sensor.npy", sensorData)
+        saveAndExit = True
 
     # Initializing sensor figure
     fig, ax = plt.subplots()
@@ -157,6 +165,9 @@ if __name__ == "__main__":
         vmax=1.
     )
 
+    # Save data when closing the figure
+    fig.canvas.mpl_connect("close_event", on_close)
+
     ax.set_title("Sensor")
 
     fig.canvas.draw()
@@ -169,7 +180,7 @@ if __name__ == "__main__":
     # sources
     previousTime = time.time()
     nbIterations = 0
-    while True:
+    while not saveAndExit:
         nbIterations += nbParallelRays
         frameID = nbIterations // nbParallelRays
 
@@ -229,36 +240,38 @@ if __name__ == "__main__":
             # Rasterization. Slows down computation, 
             # uncomment to see 3D beam for debugging
             
-            # II.(ii) Rasterizing in 2D is useful for debugging
-            wp.launch(
-                kernel  = rasterize3D,
-                dim     = rasterizerBuffer.shape,
-                inputs  = [intersectionsBuffer, nbParallelRays],
-                outputs = [rasterizerBuffer]
-            )
+            showRasterizer = False
+            if showRasterizer:
+                # II.(ii) Rasterizing in 2D is useful for debugging
+                wp.launch(
+                    kernel  = rasterize3D,
+                    dim     = rasterizerBuffer.shape,
+                    inputs  = [intersectionsBuffer, nbParallelRays],
+                    outputs = [rasterizerBuffer]
+                )
 
-            # III.(ii) Accumulating and normalizing the image buffer
-            img = (img * (nbIterations - nbParallelRays) + rasterizerBuffer.numpy()) / nbIterations
+                # III.(ii) Accumulating and normalizing the image buffer
+                img = (img * (nbIterations - nbParallelRays) + rasterizerBuffer.numpy()) / nbIterations
 
-            # III.(iii) Once accumulated, we can display the current image
+                # III.(iii) Once accumulated, we can display the current image
 
-            # Computing current RPS
-            currentTime = time.time()
-            rps = nbParallelRays / (currentTime - previousTime)
-            previousTime = currentTime
+                # Computing current RPS
+                currentTime = time.time()
+                rps = nbParallelRays / (currentTime - previousTime)
+                previousTime = currentTime
 
-            # Show everything on screen
-            imgNorm = img / img.max()
-            cv2.putText(imgNorm, f"RPS: {rps:.2f}"      , (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            cv2.putText(imgNorm, f"Rays: {nbIterations}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            cv2.imshow("LuxMachina", imgNorm)
+                # Show everything on screen
+                imgNorm = img / img.max()
+                cv2.putText(imgNorm, f"RPS: {rps:.2f}"      , (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.putText(imgNorm, f"Rays: {nbIterations}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.imshow("LuxMachina", imgNorm)
             
-            # Check for quitting the application
-            # CAUTION: This block NEEDS to be be
-            # called BEFORE any break statement!
-            if cv2.waitKey(1) & 0xFF == ord('q'): 
-                breakRun = True
-                break
+                # Check for quitting the application
+                # CAUTION: This block NEEDS to be be
+                # called BEFORE any break statement!
+                if cv2.waitKey(1) & 0xFF == ord('q'): 
+                    breakRun = True
+                    break
             
             # IV. If all rays are dead, we can break the loop
             # We can also break if we have reached max depth.
