@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import warp  as wp
 
@@ -125,11 +126,28 @@ if __name__ == "__main__":
     referenceBuffer = wp.array(reference_np, dtype=wp.float32)
 
     # Parameters of the renderer
-    nbParallelRays = 1_000_000
+    nbParallelRays = 3_000_000
 
     # Parameters of the optimiser
     learningRate = 5e-4
-    nIters = 50
+    nIters = 54
+
+    # Adam parameters
+    beta1 = 0.9
+    beta2 = 0.999
+    eps = 1.e-8
+
+    m = 0.
+    v = 0.
+
+    # Best state tracking
+    bestLoss = float("inf")
+    bestTz = tz
+
+    # Decay
+    initialLearningRate = learningRate
+    lrDecay = 0.98
+    minLearningRate = 1e-6
 
     for it in range(nIters):
         sensorBuffer.zero_()
@@ -216,11 +234,52 @@ if __name__ == "__main__":
         grad = float(optParams.grad.numpy()[0])
         tz   = float(optParams.numpy()[0])
 
+        # ----- Best state tracking -----
+        if loss < bestLoss:
+            bestLoss = loss
+            best_tz  = tz
+
+        """
         # Gradient descent update
         new_tz = tz - learningRate * grad
         optParams = wp.array([new_tz], dtype=wp.float32, requires_grad=True)
+        """
+        # ----- Adam update -----
+        g = grad
 
-        print(f"iter {it:03d} | loss = {loss:.8f} | tz = {tz:.8f} | grad = {grad:.8f}")
+        m = beta1 * m + (1 - beta1) * g
+        v = beta2 * v + (1 - beta2) * (g * g)
+
+        m_hat = m / (1 - beta1 ** (it + 1))
+        v_hat = v / (1 - beta2 ** (it + 1))
+
+        new_tz = tz - learningRate * m_hat / (math.sqrt(v_hat) + eps)
+
+        # ----- Optional rollback if divergence -----
+        if loss > bestLoss * 1.1:
+            new_tz = best_tz
+            m = 0.0
+            v = 0.0
+
+            # reduce learning rate
+            learningRate *= 0.5
+            learningRate = max(learningRate, minLearningRate)
+
+            tape.zero()
+
+        else:
+            # Decay
+            learningRate *= lrDecay
+
+        optParams = wp.array([new_tz], dtype=wp.float32, requires_grad=True)
+
+        print(
+            f"iter {it:03d} | "
+            f"loss = {loss:.8f} | "
+            f"tz = {tz:.8f} | "
+            f"grad = {grad:.8f} | "
+            f"lr = {learningRate:.6e}"
+        )
 
     import matplotlib.pyplot as plt
 
