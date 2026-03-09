@@ -596,7 +596,13 @@ def intersect3DRayWithParallelogram(
 
     # Intersection cannot be before ray origin
     if t < wp.float32(0.):
-        return intersection
+        return Intersection3D(
+            hit       = False,
+            hitPoint  = wp.vec3f(0., 0., 0.),
+            normal    = wp.vec3f(0., 0., 0.),
+            ray       = ray,
+            primitive = primitive
+        )
 
     # Intersection point is inside the parallelogram if it verifies:
     # intersection = alpha * u + beta * v | (alpha, beta) in [0, 1]²
@@ -615,23 +621,36 @@ def intersect3DRayWithParallelogram(
 
     # If degenerate (parallelogram collapsed), no intersection
     if det == 0.0:
-        return intersection
+        return Intersection3D(
+            hit       = False,
+            hitPoint  = wp.vec3f(0., 0., 0.),
+            normal    = wp.vec3f(0., 0., 0.),
+            ray       = ray,
+            primitive = primitive
+        )
 
-    alpha = (D * b1 - B * b2) / det
+    alpha =  (D * b1 - B * b2) / det
     beta  = (-B * b1 + A * b2) / det
 
     # Intersection point is not on the parallelogram.
-    if alpha < 0.0 or alpha > 1.0: return intersection
-    if beta  < 0.0 or beta  > 1.0: return intersection
+    if ((alpha < 0.0 or alpha > 1.0) or
+        (beta  < 0.0 or beta  > 1.0)):
+        return Intersection3D(
+            hit       = False,
+            hitPoint  = wp.vec3f(0., 0., 0.),
+            normal    = wp.vec3f(0., 0., 0.),
+            ray       = ray,
+            primitive = primitive
+        )
 
     # Intersection is inside the parallelogram
-    intersection.hit       = True
-    intersection.hitPoint  = hitPoint
-    intersection.normal    = n
-    intersection.ray       = ray
-    intersection.primitive = primitive
-
-    return intersection
+    return Intersection3D(
+        hit       = True,
+        hitPoint  = hitPoint,
+        normal    = n,
+        ray       = ray,
+        primitive = primitive
+    )
 
 @wp.func
 def intersect3DRayWithDisk(
@@ -1050,6 +1069,21 @@ def intersect3DRayWithCylinderBlocker(
     intersection = intersect3DRayWithCylinder(ray, primitive)
     intersection.ray.isAlive = False
     return intersection
+
+@wp.kernel
+def noIntersection3DRays(
+    raysBuffer         : wp.array(dtype=Ray3D, ndim=1),
+    intersectionsBuffer: wp.array(dtype=Intersection3D, ndim=1)
+):
+    ID = wp.tid()
+
+    intersectionsBuffer[ID] = Intersection3D(
+        hit = False,
+        hitPoint  = wp.vec3(0., 0., 0.),
+        normal    = wp.vec3(0., 0., 0.),
+        ray       = raysBuffer[ID],
+        primitive = Primitive3D()
+    )
 
 @wp.kernel
 def intersect3DRays(
