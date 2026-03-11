@@ -14,6 +14,58 @@ from propagations        import propagate3DRays
 
 from structures import Intersection3D, LightSource3D, Primitive3D, Ray3D, Sensor3D
 
+@wp.func
+def rodrigues(r: wp.vec3f) -> wp.mat33f:
+    theta = wp.length(r)
+
+    I = wp.mat33f(
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+    )
+
+    if theta < 1e-8:
+        return I
+
+    k = r / theta
+
+    K = wp.mat33f(
+         0.0, -k.z,  k.y,
+         k.z,  0.0, -k.x,
+        -k.y,  k.x,  0.0
+    )
+
+    R = I + wp.sin(theta) * K + (1.0 - wp.cos(theta)) * (K @ K)
+
+    return R
+
+@wp.func
+def rotateVec(v: wp.vec3f, theta: wp.float32, phi: wp.float32, psi: wp.float32) -> wp.vec3f:
+    cth = wp.cos(theta)
+    sth = wp.sin(theta)
+
+    cph = wp.cos(phi)
+    sph = wp.sin(phi)
+
+    cps = wp.cos(psi)
+    sps = wp.sin(psi)
+
+    # Rz(phi)
+    x1 =  cph * v.x - sph * v.y
+    y1 =  sph * v.x + cph * v.y
+    z1 =  v.z
+
+    # Ry(theta)
+    x2 =  cth * x1 + sth * z1
+    y2 =  y1
+    z2 = -sth * x1 + cth * z1
+
+    # Rz(psi)
+    x3 =  cps * x2 - sps * y2
+    y3 =  sps * x2 + cps * y2
+    z3 =  z2
+
+    return wp.vec3f(x3, y3, z3)
 
 @wp.kernel
 def transformEmitterSystem(
@@ -28,9 +80,18 @@ def transformEmitterSystem(
     emitterLightSourcesWorldBuffer: wp.array(dtype=LightSource3D, ndim=1),
     emitterPrimitivesWorldBuffer  : wp.array(dtype=Primitive3D, ndim=1)
 ):
-    tz    = poseParams[0]
+    tx = poseParams[0]
+    ty = poseParams[1]
+    tz = poseParams[2]
 
-    t = wp.vec3f(0., 0., tz)
+    rx = poseParams[3]
+    ry = poseParams[4]
+    rz = poseParams[5]
+
+    t = wp.vec3f(tx, ty, tz)
+    r = wp.vec3f(rx, ry, rz)
+
+    R = rodrigues(r)
 
     # Transforming light sources
     for lightSourceID in range(nbLightSources):
@@ -39,9 +100,9 @@ def transformEmitterSystem(
         if lsLocal.type == 1: # Parallelogram lambertian
             lsWorld = LightSource3D(
                 type = lsLocal.type,
-                v0   = lsLocal.v0 + t,
-                v1   = lsLocal.v1,
-                v2   = lsLocal.v2,
+                v0 = R @ lsLocal.v0 + t,
+                v1 = R @ lsLocal.v1,
+                v2 = R @ lsLocal.v2,
                 f0   = lsLocal.f0
             )
 
@@ -58,8 +119,8 @@ def transformEmitterSystem(
             
             pWorld = Primitive3D(
                 type = pLocal.type,
-                v0   = pLocal.v0 + t,
-                v1   = pLocal.v1,
+                v0   = R @ pLocal.v0 + t,
+                v1   = R @ pLocal.v1,
                 v2   = pLocal.v2,   # Unused for these types
                 v3   = pLocal.v3,   # Unused for these types
                 f0   = pLocal.f0,
@@ -118,13 +179,16 @@ if __name__ == "__main__":
     #wp.config.verify_autograd_array_access=True # Better to check potential problems
 
     # Initialisation
-    tz = wp.float32(0.)
+    tx, ty, tz = wp.float32(0.), wp.float32(0.), wp.float32(0.)
+    rx, ry, rz = wp.float32(1e-5), wp.float32(1e-5), wp.float32(1e-5)
+
 
     # Since optParams is the array that will be optimised
     # at the end, it is thus needed to set 'requires_grad' 
     # as True
     optParams = wp.array(
-        [tz], dtype=wp.float32, requires_grad=True
+        #[tx, ty, tz], dtype=wp.float32, requires_grad=True
+        [tx, ty, tz, rx, ry, rz], dtype=wp.float32, requires_grad=True
     )
 
     # Light source initialisation
@@ -262,28 +326,30 @@ if __name__ == "__main__":
     referenceBuffer = wp.array(referenceNp, dtype=wp.float32)
 
     # Parameters of the renderer
-    nbParallelRays = 250_000
+    nbParallelRays = 1_000_000
     maxDepth = 10
 
     # Parameters of the optimiser
-    learningRate = 1e-3
+    learningRate = 1e-5
+    learningRateVec = np.array([1e-4, 1e-4, 1e-3, 1e-6, 1e-6, 1e-6], dtype=np.float64)
     nIters = 1000
 
     lossTolerance = 1e-9
     stallCounter = 0
-    patience = 8
+    patience = 20
 
     # Adam parameters
     beta1 = 0.9
     beta2 = 0.999
     eps = 1.e-8
 
-    m = 0.
-    v = 0.
+    nParams = optParams.numpy().shape[0]
+    m = np.zeros(nParams)
+    v = np.zeros(nParams)
 
     # Best state tracking
     bestLoss = float("inf")
-    bestTz = tz
+    bestParams = optParams.numpy().copy()
 
     # Decay
     initialLearningRate = learningRate
@@ -375,38 +441,35 @@ if __name__ == "__main__":
         tape.backward(loss=lossBuffer, grads=None)
 
         loss = float(lossBuffer.numpy()[0])
-        grad = float(optParams.grad.numpy()[0])
-        tz   = float(optParams.numpy()[0])
+
+        params = optParams.numpy()        # shape (6,)
+        grads  = optParams.grad.numpy()   # shape (6,)
 
         # ----- Best state tracking -----
         if loss < bestLoss - lossTolerance:
-            bestLoss = loss
-            bestTz   = tz
+            bestLoss   = loss
+            bestParams = params.copy()
             stallCounter = 0
         else:
             stallCounter += 1
-
-        """
-        # Gradient descent update
-        new_tz = tz - learningRate * grad
-        optParams = wp.array([new_tz], dtype=wp.float32, requires_grad=True)
-        """
+        
         # ----- Adam update -----
-        g = grad
+        g = grads
 
-        m = beta1 * m + (1 - beta1) * g
+        m = beta1 * m + (1 - beta1) *  g
         v = beta2 * v + (1 - beta2) * (g * g)
 
         m_hat = m / (1 - beta1 ** (it + 1))
         v_hat = v / (1 - beta2 ** (it + 1))
 
-        newTz = tz - learningRate * m_hat / (math.sqrt(v_hat) + eps)
+        #newParams = params - learningRate * m_hat / (np.sqrt(v_hat) + eps)
+        newParams = params - learningRateVec * m_hat / (np.sqrt(v_hat) + eps)
 
         # ----- Optional rollback if divergence -----
         if loss > bestLoss * 1.1:
-            newTz = bestTz
-            m = 0.0
-            v = 0.0
+            newParams = bestParams.copy()
+            m[:] = 0.0
+            v[:] = 0.0
 
             # reduce learning rate
             learningRate *= 0.5
@@ -418,14 +481,16 @@ if __name__ == "__main__":
             # Decay
             learningRate *= lrDecay
 
-        optParams = wp.array([newTz], dtype=wp.float32, requires_grad=True)
+        optParams = wp.array(newParams.astype(np.float32), dtype=wp.float32, requires_grad=True)
 
         print(
             f"iter {it:03d} | "
             f"loss = {loss:.8f} | "
-            f"tz = {tz:.8f} | "
-            f"grad = {grad:.8f} | "
-            f"lr = {learningRate:.6e}"
+            f"tx={params[0]:.5f} ty={params[1]:.5f} tz={params[2]:.5f} | "
+            f"rx={params[3]:.5f} ry={params[4]:.5f} rz={params[5]:.5f} | "
+            f"gx={grads[0]:.3e} gy={grads[1]:.3e} gz={grads[2]:.3e} | "
+            f"grx={grads[3]:.3e} gry={grads[4]:.3e} grz={grads[5]:.3e} | "
+            f"lr={learningRate:.2e}"
         )
 
         if stallCounter >= patience:
