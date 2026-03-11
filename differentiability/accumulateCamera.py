@@ -1,6 +1,6 @@
 import warp as wp
 
-from structures import CameraModel
+from structures import CameraModel, Intersection3D, Primitive3D
 
 @wp.func
 def projectPointWorldToOpenCVPinholeCamera(
@@ -88,3 +88,17 @@ def projectPointWorldToOpenCVPinholeCamera(
 
 
     return wp.vec3f(u, v, 1.)
+
+
+@wp.kernel
+def accumulateCameraAfterLambertianPlate(
+    intersectionsBuffer: wp.array(dtype=Intersection3D, ndim=1),
+    camera             : CameraModel,
+    lambertianPlate    : Primitive3D,
+
+    cameraBuffer       : wp.array(dtype=wp.float32, ndim=2)
+):
+    rayID = wp.tid()
+
+    intersection = intersectionsBuffer[rayID]
+    ray          = intersection.ray
