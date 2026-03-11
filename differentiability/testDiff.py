@@ -130,7 +130,11 @@ if __name__ == "__main__":
 
     # Parameters of the optimiser
     learningRate = 5e-4
-    nIters = 54
+    nIters = 50
+
+    lossTolerance = 1e-9
+    stallCounter = 0
+    patience = 8
 
     # Adam parameters
     beta1 = 0.9
@@ -235,9 +239,12 @@ if __name__ == "__main__":
         tz   = float(optParams.numpy()[0])
 
         # ----- Best state tracking -----
-        if loss < bestLoss:
+        if loss < bestLoss - lossTolerance:
             bestLoss = loss
             best_tz  = tz
+            stallCounter = 0
+        else:
+            stallCounter += 1
 
         """
         # Gradient descent update
@@ -280,6 +287,10 @@ if __name__ == "__main__":
             f"grad = {grad:.8f} | "
             f"lr = {learningRate:.6e}"
         )
+
+        if stallCounter >= patience:
+            print("Early stopping: loss stalled.")
+            break
 
     import matplotlib.pyplot as plt
 
