@@ -1,6 +1,8 @@
 import warp as wp
 
-from structures import CameraModel, Intersection3D, Primitive3D
+from intersections import intersect3DRayWithParallelogram
+
+from structures import CameraModel, Intersection3D, Primitive3D, Ray3D
 
 @wp.func
 def projectPointWorldToOpenCVPinholeCamera(
@@ -86,7 +88,6 @@ def projectPointWorldToOpenCVPinholeCamera(
     if v < wp.float32(0.) or v >= wp.float32(height):
         return wp.vec3(-1., -1., 0.)
 
-
     return wp.vec3f(u, v, 1.)
 
 
@@ -102,3 +103,75 @@ def accumulateCameraAfterLambertianPlate(
 
     intersection = intersectionsBuffer[rayID]
     ray          = intersection.ray
+
+    accumulate = False
+
+    intersectPlate = intersect3DRayWithParallelogram(ray, lambertianPlate)
+    if intersectPlate.hit:
+
+        # The infinite ray intersects the plate parallelogram.
+        # We need to check if another intersection has occured
+        # before reaching the lambertian plate.
+        if intersectionsBuffer[rayID].hit:
+            # Is the intersection point before the lambertian plate along the ray?
+            distToHit   = wp.norm_l2(intersectionsBuffer[rayID].hitPoint - ray.origin)
+            distToPlate = wp.norm_l2(intersectPlate.hitPoint - ray.origin)
+
+            if distToPlate < distToHit:
+                accumulate = True
+
+        else:
+            accumulate = True
+
+        # We will suppose that the camera sees the plate directly
+        # So there is no need to check once again for another new
+        # intersection
+        if accumulate:
+            plateTangent   = wp.normalize(lambertianPlate.v1 - lambertianPlate.v0)
+            plateBitangent = wp.normalize(lambertianPlate.v3 - lambertianPlate.v0)
+            plateNormal    = wp.normalize(wp.cross(plateTangent, plateBitangent))
+
+            newRayDirection = wp.normalize(camera.v0 - intersectPlate.hitPoint)
+
+            cosI = wp.dot(-ray.direction, plateNormal)
+            if cosI < wp.float32(0.):
+                cosI = wp.dot(-ray.direction, -plateNormal)
+
+            proj = projectPointWorldToOpenCVPinholeCamera(
+                intersectPlate.hitPoint, camera)
+
+            if proj[2] > 0.5: # Visibility test
+
+                # Bilinear splatting to allow differentiability
+                x = proj[0]
+                y = proj[1]
+
+                i0 = wp.int32(wp.floor(x))
+                j0 = wp.int32(wp.floor(y))
+                i1 = i0 + 1
+                j1 = j0 + 1
+
+                dx = x - wp.float32(i0)
+                dy = y - wp.float32(j0)
+
+                w00 = (1.0 - dx) * (1.0 - dy)
+                w10 = dx * (1.0 - dy)
+                w01 = (1.0 - dx) * dy
+                w11 = dx * dy
+
+                e = ray.energy * cosI / wp.pi # Because of the Lambertian reflectance
+
+                width  = camera.i0
+                height = camera.i1
+
+                if i0 >= 0 and i0 < width and j0 >= 0 and j0 < height:
+                    wp.atomic_add(cameraBuffer, j0, i0, w00 * e)
+
+                if i1 >= 0 and i1 < width and j0 >= 0 and j0 < height:
+                    wp.atomic_add(cameraBuffer, j0, i1, w10 * e)
+
+                if i0 >= 0 and i0 < width and j1 >= 0 and j1 < height:
+                    wp.atomic_add(cameraBuffer, j1, i0, w01 * e)
+
+                if i1 >= 0 and i1 < width and j1 >= 0 and j1 < height:
+                    wp.atomic_add(cameraBuffer, j1, i1, w11 * e)
