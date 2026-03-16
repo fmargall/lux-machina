@@ -3,11 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import warp  as wp
 
-# Better for differentiable rendering, especially with 
-# dichotomy method for aspheric lens intersection. But
-# this will slow down gradient computation strongly.
-wp.config.max_unroll = 64 
-
 from accumulateCamera    import accumulateCameraAfterLambertianPlate
 from generatePrimaryRays import generatePrimary3DRays
 from intersections       import noIntersection3DRays, intersect3DRays
@@ -139,39 +134,21 @@ def transformEmitterSystem(
 
         emitterPrimitivesWorldBuffer[primitiveID] = pWorld
 
-@wp.kernel
-def computeLoss(
-    sensorBuffer   : wp.array(dtype=wp.float32, ndim=2),
-    referenceBuffer: wp.array(dtype=wp.float32, ndim=2),
-    loss: wp.array(dtype=wp.float32, ndim=1)
-):
-    i, j = wp.tid()
+def rotate_plate(v, center, angle_x=0.0, angle_y=0.0):
+    cx, cy = np.cos(angle_x), np.cos(angle_y)
+    sx, sy = np.sin(angle_x), np.sin(angle_y)
 
-    diff = sensorBuffer[i, j] - referenceBuffer[i, j]
+    R = np.array([
+        [cy,      0, sy],
+        [sx*sy,  cx, -sx*cy],
+        [-cx*sy, sx,  cx*cy]
+    ])
 
-    wp.atomic_add(loss, 0, diff * diff)
+    p = np.array([v.x, v.y, v.z]) - center
+    p = R @ p
+    p = p + center
 
-@wp.kernel
-def computeSum(
-    sensorBuffer: wp.array(dtype=wp.float32, ndim=2),
-    totalEnergy : wp.array(dtype=wp.float32, ndim=1)
-):
-    i, j = wp.tid()
-
-    wp.atomic_add(totalEnergy, 0, sensorBuffer[i, j])
-
-@wp.kernel
-def normalizeSensor(
-    sensorBuffer: wp.array(dtype=wp.float32, ndim=2),
-    totalEnergy : wp.array(dtype=wp.float32, ndim=1),
-
-    normalizedBuffer: wp.array(dtype=wp.float32, ndim=2)
-):
-    i, j = wp.tid()
-
-    eps = wp.float32(1e-8)
-
-    normalizedBuffer[i, j] = sensorBuffer[i, j] / (totalEnergy[0] + eps)
+    return wp.vec3f(*p)
 
 
 if __name__ == "__main__":
@@ -293,25 +270,38 @@ if __name__ == "__main__":
 
     # Initializing buffers
     emitterLightSourcesLocalBuffer = wp.array(    lightSourcesList , dtype=LightSource3D)
-    emitterLightSourcesWorldBuffer = wp.zeros(len(lightSourcesList), dtype=LightSource3D, requires_grad=True)
+    emitterLightSourcesWorldBuffer = wp.zeros(len(lightSourcesList), dtype=LightSource3D)
     emitterPrimitivesLocalBuffer   = wp.array(    primitivesList   , dtype=Primitive3D)
-    emitterPrimitivesWorldBuffer   = wp.zeros(len(primitivesList)  , dtype=Primitive3D, requires_grad=True)
+    emitterPrimitivesWorldBuffer   = wp.zeros(len(primitivesList)  , dtype=Primitive3D)
 
     # Lambertian plate
     lambertianPlate = Primitive3D()
     lambertianPlate.type = 5
-    lambertianPlate.v0 = wp.vec3f() # Vertex 0, connected to 1 and 3
-    lambertianPlate.v1 = wp.vec3f() # Vertex 1, connected to 0 and 2
-    lambertianPlate.v2 = wp.vec3f() # Vertex 2, connected to 1 and 3
-    lambertianPlate.v3 = wp.vec3f() # Vertex 3, connected to 0 and 2
+    plateSize = 0.5
+    zPlate = 0.35
+
+    lambertianPlate.v0 = wp.vec3f(-plateSize, -plateSize, zPlate)
+    lambertianPlate.v1 = wp.vec3f( plateSize, -plateSize, zPlate)
+    lambertianPlate.v2 = wp.vec3f( plateSize,  plateSize, zPlate)
+    lambertianPlate.v3 = wp.vec3f(-plateSize,  plateSize, zPlate)
+
+    tilt_x = np.deg2rad(75.0)
+    tilt_y = np.deg2rad(45.0)
+
+    center = np.array([0.0, 0.0, zPlate])
+
+    lambertianPlate.v0 = rotate_plate(lambertianPlate.v0, center, tilt_x, tilt_y)
+    lambertianPlate.v1 = rotate_plate(lambertianPlate.v1, center, tilt_x, tilt_y)
+    lambertianPlate.v2 = rotate_plate(lambertianPlate.v2, center, tilt_x, tilt_y)
+    lambertianPlate.v3 = rotate_plate(lambertianPlate.v3, center, tilt_x, tilt_y)
 
     # Camera initialisation
     camera = CameraModel()
     camera.type = 0 # OpenCV pinhole
     camera.i0  = wp.int32(512) # Width
     camera.i1  = wp.int32(512) # Height
-    camera.f0  = wp.float32(1066.67)
-    camera.f1  = wp.float32(1066.67)
+    camera.f0  = wp.float32(1766.67)
+    camera.f1  = wp.float32(1766.67)
     camera.f2  = wp.float32(256.) # cx
     camera.f3  = wp.float32(256.) # cy
 
@@ -355,9 +345,8 @@ if __name__ == "__main__":
 
     plt.show(block=False)
 
-
     # Parameters of the renderer
-    nbParallelRays = 1_000_000
+    nbParallelRays = 100_000
     maxDepth = 10
 
     # Emitter
@@ -375,12 +364,12 @@ if __name__ == "__main__":
         frameID = nbIterations // nbParallelRays
 
         # Generate primary rays from light sources buffer
-        raysBuffer = wp.empty(nbParallelRays, dtype=Ray3D, requires_grad=True)
+        raysBuffer = wp.empty(nbParallelRays, dtype=Ray3D)
         wp.launch(
             kernel  = generatePrimary3DRays,
             dim     = nbParallelRays,
             # FrameID (0) is stabilised for optimisation:
-            inputs  = [0, emitterLightSourcesWorldBuffer],
+            inputs  = [frameID, emitterLightSourcesWorldBuffer],
             outputs = [raysBuffer]
         )
 
@@ -388,7 +377,7 @@ if __name__ == "__main__":
         for depth in range(maxDepth):
             # Generate empty intersection buffer
             raysStatusBuffer    = wp.empty((nbParallelRays,), dtype=wp.bool)
-            intersectionsBuffer = wp.empty((nbParallelRays,), dtype=Intersection3D, requires_grad=True)
+            intersectionsBuffer = wp.empty((nbParallelRays,), dtype=Intersection3D)
             wp.launch(
                 kernel  = intersect3DRays, # noIntersection3DRays,
                 dim     = nbParallelRays,
@@ -420,6 +409,6 @@ if __name__ == "__main__":
             wp.launch(
                 kernel = propagate3DRays,
                 dim    = nbParallelRays,
-                inputs = [intersectionsBuffer, 0], # IterationID is stabilised for optimisation
+                inputs = [intersectionsBuffer, frameID], # IterationID is stabilised for optimisation
                 outputs = [raysBuffer]
             )

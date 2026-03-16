@@ -122,10 +122,10 @@ class Primitive:
 @wp.struct
 class Primitive3D:
     type: wp.int32
-    v0  : wp.vec3
-    v1  : wp.vec3
-    v2  : wp.vec3
-    v3  : wp.vec3
+    v0  : wp.vec3f
+    v1  : wp.vec3f
+    v2  : wp.vec3f
+    v3  : wp.vec3f
     f0  : wp.float32
     f1  : wp.float32
     f2  : wp.float32
