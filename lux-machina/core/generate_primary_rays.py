@@ -1,8 +1,8 @@
 import warp as wp
 
-from structures import _Emitter3D, _IN_OUT, _Ray3D
+from .structures import _Emitter3D, _IN_OUT, _Ray3D
 
-wp.func
+@wp.func
 def _generateRayFrom3DLambertianEmitter(
     emitter: _Emitter3D,
     seed   :  wp.int32

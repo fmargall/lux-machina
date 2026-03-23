@@ -1,6 +1,6 @@
 import warp as wp
 
-from structures import _Intersection3D, _Primitive3D, _Ray3D, _IN_OUT, _OUT_IN
+from .structures import _Intersection3D, _Primitive3D, _Ray3D, _IN_OUT, _OUT_IN
 
 
 @wp.func

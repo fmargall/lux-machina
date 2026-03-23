@@ -1,6 +1,6 @@
 import warp as wp
 
-from structures import _Intersection3D, _Ray3D
+from .structures import _Intersection3D, _Ray3D
 
 @wp.kernel
 def _propagateRays(

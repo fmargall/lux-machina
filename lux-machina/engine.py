@@ -5,7 +5,45 @@ import warp as wp
 from core.generate_primary_rays import _generatePrimaryRays
 from core.intersect_rays        import _intersectRays
 from core.propagate_rays        import _propagateRays
-from core.structures            import _Ray3D
+from core.structures            import _Intersection3D, _Ray3D
+
+# ============================================================
+# SCENE
+# ============================================================
+
+class Scene:
+    def __init__(self):
+        self.emitters   = []
+        self.primitives = []
+        self.sensors    = []
+        self.cameras    = []
+
+# ============================================================
+# CAMERA
+# ============================================================
+
+class Camera:
+    def __init__(self, model, requires_grad=False):
+        self.model = model
+
+        self.buffer = wp.zeros(
+            (model.i0, model.i1),
+            dtype=wp.float32,
+            requires_grad=requires_grad
+        )
+
+    def clear(self):
+        self.buffer.zero_()
+
+    def accumulate(self, engine):
+        """
+        À implémenter avec ton kernel caméra
+        """
+        raise NotImplementedError
+
+# ============================================================
+# ENGINE
+# ============================================================
 
 class LuxMachinaEngine:
     def __init__(self, maxDepthLevel: int = 10, nbParallelRays: int = 10_000, optimize: bool = False):
@@ -23,20 +61,28 @@ class LuxMachinaEngine:
         # Optimization parameters
         self._optimize = optimize
 
-        if self._optimize:
-            self._lossBuffer = None
-
-        else:
-            self._lossBuffer = None
-
         # _frameID is used for the seeds of the Monte Carlo simulation
         # It should not be modified directly and should be incremented
         # using the associated function. It will be left to zero, when
         # doing optimization.
         self._frameID = 0
 
-        # Initialization of all buffers
+        # ----------------------------------------------------
+        # BUFFERS
+        # ----------------------------------------------------
+
         self._raysBuffer = wp.empty(nbParallelRays, dtype=_Ray3D, requires_grad=self._optimize)
+        self._intersectionsBuffer = wp.empty(nbParallelRays, dtype=_Intersection3D, requires_grad=self._optimize)
+
+        if self._optimize:
+            self._lossBuffer = None
+
+        else:
+            self._lossBuffer = None
+
+    # ========================================================
+    # MAIN LOOP
+    # ========================================================
 
     def render(self):
         # Preparation of the context. When the engine is not only in
@@ -51,9 +97,9 @@ class LuxMachinaEngine:
             # Generate the primary rays
             self._generatePrimaryRays()
 
-            for depthLevel in range(self.maxDepthLevel):
+            for depthLevel in range(self._maxDepthLevel):
                 # Intersect the primitives
-                self._intersectPrimitives(self)
+                self._intersectPrimitives()
 
                 # Accumulate for every sensor
                 for sensor in self._sensorsList:
@@ -68,7 +114,7 @@ class LuxMachinaEngine:
                     camera.accumulate(self)
 
                 # Propagate rays
-                self._propagateRays(self, depthLevel)
+                self._propagateRays(depthLevel)
 
             if self._optimize:
                 self._computeLoss()
@@ -76,6 +122,10 @@ class LuxMachinaEngine:
         if self._optimize:
             tape.backward(loss=self._lossBuffer, grads=None)
 
+
+    # ========================================================
+    # KERNEL WRAPPERS
+    # ========================================================
 
     def _generatePrimaryRays(self):
         wp.launch(
@@ -103,9 +153,27 @@ class LuxMachinaEngine:
             outputs = [self._raysBuffer]
         )
 
+    # ========================================================
+    # LOSS
+    # ========================================================
+
     def _computeLoss(self):
         pass
 
+    # ========================================================
+    # FRAME MANAGEMENT
+    # ========================================================
+
     def _incrementFrameID(self):
         if not self._optimize:
-            self._frameID =+ 1
+            self._frameID += 1
+
+if __name__ == "__main__":
+    wp.init()
+
+    # -------------------------
+    # Scene
+    # -------------------------
+    scene = Scene()
+
+
