@@ -326,7 +326,7 @@ if __name__ == "__main__":
     referenceBuffer = wp.array(referenceNp, dtype=wp.float32)
 
     # Parameters of the renderer
-    nbParallelRays = 1_000_000
+    nbParallelRays = 50_000
     maxDepth = 10
 
     # Parameters of the optimiser
@@ -336,7 +336,7 @@ if __name__ == "__main__":
 
     lossTolerance = 1e-9
     stallCounter = 0
-    patience = 20
+    patience = 50
 
     # Adam parameters
     beta1 = 0.9
