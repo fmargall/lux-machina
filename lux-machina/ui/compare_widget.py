@@ -3,7 +3,7 @@ import cmcrameri.cm as cmc
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout
 
-from .viewer_widget import ViewerWidget
+from viewer_widget import ViewerWidget
 
 
 class CompareWidget(QWidget):
