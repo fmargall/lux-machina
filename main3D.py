@@ -14,6 +14,8 @@ from rasterizer import rasterize3D
 
 from structures import Intersection3D, LightSource3D, Primitive3D, Ray3D, Sensor3D
 
+
+
 if __name__ == "__main__":
     # GPU support using NVIDIA Warp
     wp.init()

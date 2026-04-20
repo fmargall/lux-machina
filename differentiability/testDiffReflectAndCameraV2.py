@@ -150,6 +150,40 @@ def rotate_plate(v, center, angle_x=0.0, angle_y=0.0):
 
     return wp.vec3f(*p)
 
+@wp.kernel
+def computeLoss(
+    sensorBuffer   : wp.array(dtype=wp.float32, ndim=2),
+    referenceBuffer: wp.array(dtype=wp.float32, ndim=2),
+    loss: wp.array(dtype=wp.float32, ndim=1)
+):
+    i, j = wp.tid()
+
+    diff = sensorBuffer[i, j] - referenceBuffer[i, j]
+
+    wp.atomic_add(loss, 0, diff * diff)
+
+@wp.kernel
+def computeSum(
+    sensorBuffer: wp.array(dtype=wp.float32, ndim=2),
+    totalEnergy : wp.array(dtype=wp.float32, ndim=1)
+):
+    i, j = wp.tid()
+
+    wp.atomic_add(totalEnergy, 0, sensorBuffer[i, j])
+
+@wp.kernel
+def normalizeSensor(
+    sensorBuffer: wp.array(dtype=wp.float32, ndim=2),
+    totalEnergy : wp.array(dtype=wp.float32, ndim=1),
+
+    normalizedBuffer: wp.array(dtype=wp.float32, ndim=2)
+):
+    i, j = wp.tid()
+
+    eps = wp.float32(1e-8)
+
+    normalizedBuffer[i, j] = sensorBuffer[i, j] / (totalEnergy[0] + eps)
+
 
 if __name__ == "__main__":
     wp.init()
@@ -345,19 +379,211 @@ if __name__ == "__main__":
 
     plt.show(block=False)
 
+    # Reference initialisation
+    from pathlib import Path
+    path = Path(__file__).parent / "reference_camera_sensor.npy"
+    referenceNp = np.load(path).astype(np.float32)
+    #referenceNp = np.load("reference_sensor.npy").astype(np.float32)
+    referenceNp /= referenceNp.sum()
+    referenceBuffer = wp.array(referenceNp, dtype=wp.float32)
+
     # Parameters of the renderer
-    nbParallelRays = 100_000
+    nbParallelRays = 50_000
     maxDepth = 10
 
-    # Emitter
-    wp.launch(
-        kernel  = transformEmitterSystem,
-        dim     = 1,
-        inputs  = [optParams, len(lightSourcesList), len(primitivesList),
-                    emitterLightSourcesLocalBuffer, emitterPrimitivesLocalBuffer],
-        outputs = [emitterLightSourcesWorldBuffer, emitterPrimitivesWorldBuffer]
-    )
+    # Parameters of the optimiser
+    learningRate = 1e-5
+    learningRateVec = np.array([1e-4, 1e-4, 1e-3, 1e-6, 1e-6, 1e-6], dtype=np.float64)
+    nIters = 1000
 
+    lossTolerance = 1e-9
+    stallCounter = 0
+    patience = 50
+
+    # Adam parameters
+    beta1 = 0.9
+    beta2 = 0.999
+    eps = 1.e-8
+
+    nParams = optParams.numpy().shape[0]
+    m = np.zeros(nParams)
+    v = np.zeros(nParams)
+
+    # Best state tracking
+    bestLoss = float("inf")
+    bestParams = optParams.numpy().copy()
+
+    # Decay
+    initialLearningRate = learningRate
+    lrDecay = 1.0
+    minLearningRate = 1e-6
+
+    for it in range(nIters):
+        cameraBuffer.zero_()
+
+        tape = wp.Tape()
+        with tape:
+            # ----- Beginning of the optimizer -----
+
+            # Emitter
+            wp.launch(
+                kernel  = transformEmitterSystem,
+                dim     = 1,
+                inputs  = [optParams, len(lightSourcesList), len(primitivesList),
+                           emitterLightSourcesLocalBuffer, emitterPrimitivesLocalBuffer],
+                outputs = [emitterLightSourcesWorldBuffer, emitterPrimitivesWorldBuffer]
+            )
+
+            # Generate primary rays from light sources buffer
+            raysBuffer = wp.empty(nbParallelRays, dtype=Ray3D, requires_grad=True)
+            wp.launch(
+                kernel  = generatePrimary3DRays,
+                dim     = nbParallelRays,
+                # FrameID (0) is stabilised for optimisation:
+                inputs  = [0, emitterLightSourcesWorldBuffer],
+                outputs = [raysBuffer]
+            )
+
+            # Ray tracing
+            for depth in range(maxDepth):
+                # Generate empty intersection buffer
+                raysStatusBuffer    = wp.empty((nbParallelRays,), dtype=wp.bool)
+                intersectionsBuffer = wp.empty((nbParallelRays,), dtype=Intersection3D, requires_grad=True)
+                wp.launch(
+                    kernel  = intersect3DRays, # noIntersection3DRays,
+                    dim     = nbParallelRays,
+                    inputs  = [raysBuffer, emitterPrimitivesWorldBuffer, len(primitivesList)],
+                    outputs = [intersectionsBuffer, raysStatusBuffer]
+                )
+
+                # Accumulate
+                wp.launch(
+                    kernel  = accumulateCameraAfterLambertianPlate,
+                    dim     = nbParallelRays,
+                    inputs  = [intersectionsBuffer, camera, lambertianPlate],
+                    outputs = [cameraBuffer]
+                )
+
+                # Propagate rays
+                wp.launch(
+                    kernel = propagate3DRays,
+                    dim    = nbParallelRays,
+                    inputs = [intersectionsBuffer, 0], # IterationID is stabilised for optimisation
+                    outputs = [raysBuffer]
+                )
+
+            totalEnergy = wp.zeros(1, dtype=wp.float32, requires_grad=True)
+
+            wp.launch(
+                kernel  = computeSum,
+                dim     = cameraBuffer.shape,
+                inputs  = [cameraBuffer],
+                outputs = [totalEnergy]
+            )
+
+            normalizedBuffer = wp.empty_like(cameraBuffer)
+
+            wp.launch(
+                kernel  = normalizeSensor,
+                dim     = cameraBuffer.shape,
+                inputs  = [cameraBuffer, totalEnergy],
+                outputs = [normalizedBuffer]
+            )
+
+            # Compute loss
+            lossBuffer = wp.zeros(1, dtype=wp.float32, requires_grad=True)
+            wp.launch(
+                kernel  = computeLoss,
+                dim     = normalizedBuffer.shape,
+                inputs  = [normalizedBuffer, referenceBuffer],
+                outputs = [lossBuffer]
+            )
+
+        # -------- End of the optimizer --------
+        tape.backward(loss=lossBuffer, grads=None)
+
+        loss = float(lossBuffer.numpy()[0])
+
+        params = optParams.numpy()        # shape (6,)
+        grads  = optParams.grad.numpy()   # shape (6,)
+
+        # ----- Best state tracking -----
+        if loss < bestLoss - lossTolerance:
+            bestLoss   = loss
+            bestParams = params.copy()
+            stallCounter = 0
+        else:
+            stallCounter += 1
+        
+        # ----- Adam update -----
+        g = grads
+
+        m = beta1 * m + (1 - beta1) *  g
+        v = beta2 * v + (1 - beta2) * (g * g)
+
+        m_hat = m / (1 - beta1 ** (it + 1))
+        v_hat = v / (1 - beta2 ** (it + 1))
+
+        #newParams = params - learningRate * m_hat / (np.sqrt(v_hat) + eps)
+        newParams = params - learningRateVec * m_hat / (np.sqrt(v_hat) + eps)
+
+        # ----- Optional rollback if divergence -----
+        if loss > bestLoss * 1.1:
+            newParams = bestParams.copy()
+            m[:] = 0.0
+            v[:] = 0.0
+
+            # reduce learning rate
+            learningRate *= 0.5
+            learningRate = max(learningRate, minLearningRate)
+
+            tape.zero()
+
+        else:
+            # Decay
+            learningRate *= lrDecay
+
+        optParams = wp.array(newParams.astype(np.float32), dtype=wp.float32, requires_grad=True)
+
+        print(
+            f"iter {it:03d} | "
+            f"loss = {loss:.8f} | "
+            f"tx={params[0]:.5f} ty={params[1]:.5f} tz={params[2]:.5f} | "
+            f"rx={params[3]:.5f} ry={params[4]:.5f} rz={params[5]:.5f} | "
+            f"gx={grads[0]:.3e} gy={grads[1]:.3e} gz={grads[2]:.3e} | "
+            f"grx={grads[3]:.3e} gry={grads[4]:.3e} grz={grads[5]:.3e} | "
+            f"lr={learningRate:.2e}"
+        )
+
+        if stallCounter >= patience:
+            print("Early stopping: loss stalled.")
+            break
+
+    import matplotlib.pyplot as plt
+
+    sensor_np    = normalizedBuffer.numpy()
+    reference_np = referenceBuffer.numpy()
+
+    vmin = 0.0
+    vmax = max(sensor_np.max(), reference_np.max())
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+    im0 = axes[0].imshow(sensor_np, origin="lower", cmap="inferno", vmin=vmin, vmax=vmax)
+    axes[0].set_title("Sensor buffer")
+    axes[0].set_xlabel("Pixel i")
+    axes[0].set_ylabel("Pixel j")
+
+    im1 = axes[1].imshow(reference_np, origin="lower", cmap="inferno", vmin=vmin, vmax=vmax)
+    axes[1].set_title("Reference buffer")
+    axes[1].set_xlabel("Pixel i")
+    axes[1].set_ylabel("Pixel j")
+
+    fig.colorbar(im0, ax=axes, label="Energy")
+
+    plt.show()
+
+    """
     nbIterations = 0
     while True:
         nbIterations += nbParallelRays
@@ -412,3 +638,4 @@ if __name__ == "__main__":
                 inputs = [intersectionsBuffer, frameID], # IterationID is stabilised for optimisation
                 outputs = [raysBuffer]
             )
+    """
