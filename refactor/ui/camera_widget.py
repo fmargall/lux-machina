@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout
 from PySide6.QtCore    import Signal
 
-from .buffer_viewer_widget  import BufferViewerWidget
-from .camera_control_widget import CameraControlWidget
+from buffer_viewer_widget  import BufferViewerWidget
+from camera_control_widget import CameraControlWidget
 
 class CameraCommandsWidget(QWidget):
     startStopLiveViewClicked = Signal()
@@ -82,3 +82,29 @@ class CameraWidget(QWidget):
 
         # Thread-safe stream to viewer
         self.frameReady.connect(self.viewer.setImage)
+
+    def _toggleLiveView(self):
+        if not self._isLive:
+            self._startLiveView()
+        else:
+            self._stopLiveView()
+
+        self._isLive = not self._isLive
+        self.commands.setLiveState(self._isLive)
+
+
+    def _startLiveView(self):
+        self._stream = self.camera.liveViewStream(callback=self._onFrame)
+
+
+    def _stopLiveView(self):
+        if self._stream:
+            self._stream.stop()
+            self._stream = None
+
+    def _shot(self):
+        # ⚠️ blocking → idéalement à mettre dans un thread plus tard
+        self.camera.shot()
+
+    def _onFrame(self, frame):
+        self.frameReady.emit(frame)
