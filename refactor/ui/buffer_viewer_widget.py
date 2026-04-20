@@ -5,7 +5,7 @@ from PySide6.QtGui     import QImage, QPixmap
 from PySide6.QtCore    import Qt
 
 
-class ViewerWidget(QLabel):
+class BufferViewerWidget(QLabel):
     def __init__(self):
         super().__init__()
 
