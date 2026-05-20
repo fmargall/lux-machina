@@ -2,7 +2,7 @@ import warp as wp
 
 
 @wp.struct
-class Ray:
+class _Ray:
     origin    : wp.vec3f
     direction : wp.vec3f
     throughput: wp.float32
@@ -13,12 +13,12 @@ class Ray:
     depth     : wp.int32
 
 @wp.struct
-class Material:
+class _Material:
     iorPositive: wp.float32
     iorNegative: wp.float32
 
 @wp.struct
-class Primitive:
+class _Primitive:
     type      : wp.int32
     materialID: wp.int32
     v0        : wp.vec3f
@@ -27,19 +27,19 @@ class Primitive:
     v3        : wp.vec3f
 
 @wp.struct
-class Intersection:
+class _Intersection:
     t          : wp.float32
     normal     : wp.vec3f
     primitiveID: wp.int32
 
 @wp.struct
-class LightSource:
+class _LightSource:
     type       : wp.int32
     primitiveID: wp.int32
     power      : wp.float32
 
-@ wp.struct
-class Sensor:
+@wp.struct
+class _Sensor:
     type: wp.int32
     v0  : wp.vec3f
     v1  : wp.vec3f
