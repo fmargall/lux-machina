@@ -21,17 +21,17 @@ def _alignWithNormal(localDirection: wp.vec3f, normal: wp.vec3f) -> wp.vec3f:
 @wp.func
 def _sampleLightSource(
     lightSource: _LightSource,
-    primitive  : _Primitive,
     N          : wp.int32,
     rngState   : wp.uint32
 ) -> _Ray:
 
     # For now, we only sample parallelogram
     uv = wp.sample_unit_square(rngState)
+    uv = uv + wp.vec2f(0.5, 0.5) # [0; 1]
 
-    edge1 = primitive.v1 - primitive.v0
-    edge2 = primitive.v3 - primitive.v0
-    point = primitive.v0 + uv[0] * edge1 + uv[1] * edge2
+    edge1 = lightSource.v1 - lightSource.v0
+    edge2 = lightSource.v3 - lightSource.v0
+    point = lightSource.v0 + uv[0] * edge1 + uv[1] * edge2
 
     # Geometric normal of the parallelogram
     crossE = wp.cross(edge1, edge2)
@@ -43,6 +43,7 @@ def _sampleLightSource(
 
     # Sample lambertian emission direction
     xi = wp.sample_unit_square(rngState)
+    xi = xi + wp.vec2f(0.5, 0.5) # [0; 1]
 
     # Sample in local hemisphere where z = up
     r        = wp.sqrt(xi[0])
@@ -65,22 +66,26 @@ def _sampleLightSource(
     # throughput = phi / N
     throughput = lightSource.power / wp.float32(N)
 
-    ray            = _Ray()
-    ray.isAlive    = True
-    ray.origin     = point
-    ray.direction  = direction
-    ray.throughput = throughput
-    ray.pdf        = pdfPosition * pdfDirection
-    ray.depth      = 0
-    # No spectral rendering for now
-    ray.wavelength = wp.float32(0.)
+    ray = _Ray(
+        isAlive    = True,
+        origin     = point,
+        direction  = direction,
+        throughput = throughput,
+        pdf        = pdfPosition * pdfDirection,
+        depth      = wp.int32(0),
+        # No spectral rendering yet
+        wavelength = wp.float32(0.),
+        # No last primitive info yet
+        sourcePrimitiveID = wp.int32(-1),
+        sourceConvexSide  = True
+    )
+
     return ray
 
 @wp.kernel
 def _generateRays(
     # --- Scene data ---
     lightSourceArray: wp.array(dtype=_LightSource),
-    primitiveArray  : wp.array(dtype=_Primitive),
     # Optional : This will be added later
     # sourceCDF: wp.array(dtype=wp.float32),
 
@@ -101,6 +106,5 @@ def _generateRays(
     # Selecting one light source
     # (For now always first one)
     lightSource = lightSourceArray[0]
-    primitive   = primitiveArray[lightSource.primitiveID]
 
-    rayArray[ID] = _sampleLightSource(lightSource, primitive, N, rngState)
+    rayArray[ID] = _sampleLightSource(lightSource, N, rngState)
