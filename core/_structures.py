@@ -12,11 +12,21 @@ class _Ray:
     isAlive   : wp.bool
     depth     : wp.int32
 
+    # Avoid self intersections
+    sourcePrimitiveID: wp.int32
+
 @wp.struct
 class _Material:
     iorPositive: wp.float32
     iorNegative: wp.float32
 
+"""
+   Types:
+   0 : Triangle
+   1 : Quad
+   2 : Disk
+   3 : Annulus
+"""
 @wp.struct
 class _Primitive:
     type      : wp.int32
@@ -25,6 +35,8 @@ class _Primitive:
     v1        : wp.vec3f
     v2        : wp.vec3f
     v3        : wp.vec3f
+    f0        : wp.float32
+    f1        : wp.float32
 
 @wp.struct
 class _Intersection:
@@ -34,9 +46,12 @@ class _Intersection:
 
 @wp.struct
 class _LightSource:
-    type       : wp.int32
-    primitiveID: wp.int32
-    power      : wp.float32
+    type : wp.int32
+    v0   : wp.vec3f
+    v1   : wp.vec3f
+    v2   : wp.vec3f
+    v3   : wp.vec3f
+    power: wp.float32
 
 @wp.struct
 class _Sensor:
