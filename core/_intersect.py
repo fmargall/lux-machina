@@ -2,12 +2,34 @@ import warp as wp
 
 from _structures import _Intersection, _Primitive, _Ray
 
+
+
 @wp.func
 def _isFlat(primitive: _Primitive) -> wp.bool:
     #            Triangle == 0              Quad == 1
     #        Disk/Annulus == 2
     return primitive.type == 0 or primitive.type == 1 \
         or primitive.type == 2
+
+@wp.func
+def _sag(primitive: _Primitive, r: wp.float32) -> wp.float32:
+    rSquared = r * r
+    radicand = 1.0 - (1.0 + primitive.f1) * rSquared / (primitive.f0 * primitive.f0)
+
+    rFour  = rSquared * rSquared
+    rSix   = rFour    * rSquared
+    rEight = rSix     * rSquared
+    rTen   = rEight   * rSquared
+
+    sag   = (rSquared / (primitive.f0 * (1.0 + wp.sqrt(radicand))))
+    sag  += primitive.f2 * rFour
+    sag  += primitive.f3 * rSix
+    sag  += primitive.f4 * rEight
+    sag  += primitive.f5 * rTen
+
+    return sag
+
+
 
 @wp.func
 def _intersectTriangle(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -> _Intersection:
@@ -213,8 +235,93 @@ def _intersectCylinder(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) 
     return noIntersection
 
 @wp.func
+def _cylinderBoundingInterval(ray: _Ray, primitive: _Primitive) -> wp.vec2f:
+    baseCenter = primitive.v0
+    axis       = primitive.v1 # (unit vector)
+    radius     = primitive.f0
+    height     = primitive.f1
+
+    zMin = wp.min(0.0, height)
+    zMax = wp.max(0.0, height)
+
+    # Project ray origin on the plane
+    # perpendicular to cylinder axis.
+    ob      = ray.origin - baseCenter
+    obDotA  = wp.dot(ob, axis)
+    obPerp  = ob - obDotA * axis
+
+    # Project ray direction on the plane
+    dDotA = wp.dot(ray.direction, axis)
+    dPerp = ray.direction - dDotA * axis
+
+    a = wp.dot(dPerp, dPerp)
+
+    # ------ Testing axial slab intersection ------
+    if wp.abs(dDotA) < 1.0e-8:
+        # The ray is parallel to the disks
+        if obDotA < zMin or obDotA > zMax:
+            return wp.vec2f(-1.0, -1.0)
+        tSlabMin = -wp.inf
+        tSlabMax =  wp.inf
+    else:
+        t1 = (zMin - obDotA) / dDotA
+        t2 = (zMax - obDotA) / dDotA
+        tSlabMin = wp.min(t1, t2)
+        tSlabMax = wp.max(t1, t2)
+
+    # --- Testing lateral cylinder intersection ---
+    if a < wp.float32(1.0e-8):
+        # the ray is parallel to cylinder axis
+        radialSquared = wp.dot(obPerp, obPerp)
+        if radialSquared > radius * radius:
+            return wp.vec2f(-1.0, -1.0)
+        tCylMin = -wp.inf
+        tCylMax =  wp.inf
+    else:
+        b = wp.float32(2.0) * wp.dot(dPerp, obPerp)
+        c = wp.dot(obPerp, obPerp) - radius * radius
+
+        disc = b * b - 4.0 * a * c
+        if disc < wp.float32(0.0):
+            # ray miss infinite cylinder
+            return wp.vec2f(-1.0, -1.0)
+
+        sqrtDisc = wp.sqrt(disc)
+        inv2a    = wp.float32(0.5) / a
+        tCylMin  = (-b - sqrtDisc) * inv2a
+        tCylMax  = (-b + sqrtDisc) * inv2a
+
+    # Intersecting the two intervals:
+    tEnter = wp.max(tSlabMin, tCylMin)
+    tExit  = wp.min(tSlabMax, tCylMax)
+
+    if tEnter >= tExit:
+        # Intervals don't overlap
+        return wp.vec2f(-1., -1.)
+
+    # The entire interval is behind the initial ray origin
+    if tExit < wp.float32(0.): return wp.vec2f(-1.0, -1.0)
+
+    # Clamp tEnter to 0 if ray starts inside the cylinder
+    if tEnter < wp.float32(0.0): tEnter = wp.float32(0.0)
+
+    return wp.vec2f(tEnter, tExit)
+
+@wp.func
 def _intersectAsphere(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -> _Intersection:
     # Not implemented yet
+
+    localAxisOrigin = primitive.v0
+    zAxisUnitVector = primitive.v1
+    R    = primitive.f0 # Radius
+    K    = primitive.f1 # Conic constant
+    a4   = primitive.f2 # 4th order aspheric coefficient
+    a6   = primitive.f3 # 6th order aspheric coefficient
+    a8   = primitive.f4 # 8th order aspheric coefficient
+    a10  = primitive.f5 # 10th order aspheric coefficient
+    rMax = primitive.f6 # Maximum radius of the asphere
+
+    sagitta = _sag(primitive, rMax)
 
     # By default, no intersection
     noIntersection = _Intersection(
@@ -222,6 +329,15 @@ def _intersectAsphere(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -
         normal      = wp.vec3f(0.0),
         primitiveID = wp.int32(-1)
     )
+
+    # --- Bounding box intersection test ---
+    # The aspheric lens profile can be quite
+    # flat or bulged. The best we can choose
+    # is a cylinder and two disks.
+
+
+
+    # ------ End of bounding box test ------
 
     # Fallbacks to no hit
     return noIntersection
