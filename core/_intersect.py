@@ -14,21 +14,56 @@ def _isFlat(primitive: _Primitive) -> wp.bool:
 @wp.func
 def _sag(primitive: _Primitive, r: wp.float32) -> wp.float32:
     rSquared = r * r
-    radicand = 1.0 - (1.0 + primitive.f1) * rSquared / (primitive.f0 * primitive.f0)
+    radicand = 1. - (1. + primitive.f1) * rSquared / (primitive.f0 * primitive.f0)
 
-    rFour  = rSquared * rSquared
-    rSix   = rFour    * rSquared
-    rEight = rSix     * rSquared
-    rTen   = rEight   * rSquared
+    rFourth = rSquared * rSquared
+    rSixth  = rFourth  * rSquared
+    rEighth = rSixth   * rSquared
+    rTenth  = rEighth  * rSquared
 
-    sag   = (rSquared / (primitive.f0 * (1.0 + wp.sqrt(radicand))))
-    sag  += primitive.f2 * rFour
-    sag  += primitive.f3 * rSix
-    sag  += primitive.f4 * rEight
-    sag  += primitive.f5 * rTen
+    sag   = (rSquared / (primitive.f0 * (1. + wp.sqrt(radicand))))
+    sag  += primitive.f2 * rFourth
+    sag  += primitive.f3 * rSixth
+    sag  += primitive.f4 * rEighth
+    sag  += primitive.f5 * rTenth
 
     return sag
 
+@wp.func
+def _sagDerivative(primitive: _Primitive, r: wp.float32) -> wp.float32:
+    rSquared = r * r
+
+    rThird   = r        * rSquared
+    rFifth   = rThird   * rSquared
+    rSeventh = rFifth   * rSquared
+    rNinth   = rSeventh * rSquared
+
+    radicand = 1. - (1. + primitive.f1) * rSquared / (primitive.f0 * primitive.f0)
+    radicand = wp.max(0.0, radicand) # Defensive clamp
+
+    derivative  = r / (primitive.f0 * wp.sqrt(radicand))
+    derivative += 4. * primitive.f2 * rThird
+    derivative += 6. * primitive.f3 * rFifth
+    derivative += 8. * primitive.f4 * rSeventh
+    derivative += 9. * primitive.f5 * rNinth
+
+    return derivative
+
+@wp.func
+def _sagResidual(ray: _Ray, primitive: _Primitive, t: wp.float32) -> wp.float32:
+    # f(t) = z_local(t) - sag(r_local(t))
+    scale    = wp.norm_l2(primitive.v1)
+    axisUnit = primitive.v1 / scale
+
+    point  = ray.origin + t * ray.direction
+
+    relPos = point - primitive.v0
+
+    zLocal = wp.dot(relPos, axisUnit) / scale
+    rVec   = relPos - wp.dot(relPos, axisUnit) * axisUnit
+    rLocal = wp.norm_l2(rVec) / scale
+
+    return zLocal - _sag(primitive, rLocal)
 
 
 @wp.func
@@ -312,7 +347,7 @@ def _intersectAsphere(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -
     # Not implemented yet
 
     localAxisOrigin = primitive.v0
-    zAxisUnitVector = primitive.v1
+    zAxisUnitVector = primitive.v1 # (unit vector in the local frame)
     R    = primitive.f0 # Radius
     K    = primitive.f1 # Conic constant
     a4   = primitive.f2 # 4th order aspheric coefficient
@@ -321,7 +356,11 @@ def _intersectAsphere(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -
     a10  = primitive.f5 # 10th order aspheric coefficient
     rMax = primitive.f6 # Maximum radius of the asphere
 
-    sagitta = _sag(primitive, rMax)
+    scale = wp.norm_l2(zAxisUnitVector)
+    sagittaLocal = _sag(primitive, rMax)
+    sagittaWorld = sagittaLocal * scale
+    rMaxWorld    = rMax * scale
+    zAxisNorm    = zAxisUnitVector / scale
 
     # By default, no intersection
     noIntersection = _Intersection(
@@ -334,13 +373,73 @@ def _intersectAsphere(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -
     # The aspheric lens profile can be quite
     # flat or bulged. The best we can choose
     # is a cylinder and two disks.
+    boundingCylinder    = _Primitive(
+        v0 = localAxisOrigin,
+        v1 = zAxisNorm,
+        f0 = rMaxWorld,
+        f1 = sagittaWorld
+    )
 
+    interval = _cylinderBoundingInterval(ray, boundingCylinder)
 
+    if interval[0] < wp.float32(0.):
+        # Missed bounding box
+        return noIntersection
 
-    # ------ End of bounding box test ------
+    tEnter = interval[0]
+    tExit  = interval[1]
 
-    # Fallbacks to no hit
-    return noIntersection
+    fEnter = _sagResidual(ray, primitive, tEnter)
+    fExit  = _sagResidual(ray, primitive, tExit)
+
+    if fEnter * fExit > wp.float32(0.):
+        return noIntersection
+
+    # ---------- Bisection method ----------
+    tMin = tEnter
+    tMax = tExit
+    fMin = fEnter
+
+    maxIter = 64
+    for it in range(maxIter):
+        tMid = (tMin + tMax) /  wp.float32(2.0)
+        fMid = _sagResidual(ray, primitive, tMid)
+
+        if fMin * fMid <= wp.float32(0.0):
+            tMax = tMid
+        else:
+            tMin = tMid
+            fMin = fMid
+
+    tHit     = (tMin + tMax) / wp.float32(2.0)
+    hitPoint = ray.origin + tHit * ray.direction
+
+    # Last check to see if we are in
+    relPos = hitPoint - primitive.v0
+    rVec   = relPos - wp.dot(relPos, zAxisNorm) * zAxisNorm
+    rLocal = wp.length(rVec) / scale
+
+    if rLocal > rMax:
+        # Outside of the lens
+        return noIntersection
+
+    sgn  = wp.sign(primitive.f0) # Sign of R
+    dSag = _sagDerivative(primitive, rLocal)
+
+    if rLocal < wp.float32(1.e-8):
+        normal3D = zAxisNorm
+    else:
+        radialUnit = rVec / wp.norm_l2(rVec)
+        # The normal should be handled carefully: equation
+        # of the sag is convex when R is taken as positive
+        normal3D = sgn * (dSag * radialUnit - zAxisNorm)
+        normal3D = wp.normalize(normal3D)
+
+    return _Intersection(
+        t           = tHit,
+        normal      = normal3D,
+        primitiveID = primitiveID,
+    )
 
 @wp.kernel
 def _intersect(
