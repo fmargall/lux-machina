@@ -17,13 +17,13 @@ import numpy as np
 import warp as wp
 import matplotlib.pyplot as plt
 
-from _structures         import (_Ray, _LightSource, _Sensor, _Intersection)
+from _structures         import (_Ray, _LightSource, _Primitive, _Sensor, _Intersection)
 from _generateRays       import _generateRays
 from _accumulateOnSensor import _accumulateOnSensor
 
 
 wp.init()
-
+wp.config.verbose = True
 
 # ──────────────────────────────────────────────────────────────────────────
 # Scene setup
@@ -33,23 +33,31 @@ wp.init()
 # Vertex order chosen so that cross(v1-v0, v3-v0) points along -z.
 lightSource       = _LightSource()
 lightSource.type  = wp.int32(0)            # lambertian parallelogram
-lightSource.v0    = wp.vec3f(-0.5,  0.5, 1.)
-lightSource.v1    = wp.vec3f( 0.5,  0.5, 1.)
-lightSource.v2    = wp.vec3f( 0.5, -0.5, 1.)
-lightSource.v3    = wp.vec3f(-0.5, -0.5, 1.)
+lightSource.v0    = wp.vec3f(-0.0015, -0.0015, 0.)
+lightSource.v1    = wp.vec3f( 0.0015, -0.0015, 0.)
+lightSource.v2    = wp.vec3f( 0.0015,  0.0015, 0.)
+lightSource.v3    = wp.vec3f(-0.0015,  0.0015, 0.)
 lightSource.power = wp.float32(1.0)        # 1 W total
 
 lightSourceArray = wp.array([lightSource], dtype=_LightSource)
+
+# Biconvex lens
+biconvexLens01 = _Primitive()
+biconvexLens01.type = 3
+biconvexLens01.v0   = wp.vec3f(0., 0., 0.0984)
+biconvexLens01.v1   = wp.vec3f(0., 0., -1.)
+biconvexLens01.f0   = wp.float32(0.0592)
+biconvexLens01.f1   = wp.float32(0.447189)
 
 
 # Sensor: 2m x 2m parallelogram at z=0, normal toward +z.
 # Vertex order chosen so that cross(v1-v0, v3-v0) points along +z (toward source).
 sensor      = _Sensor()
 sensor.type = wp.int32(0)                  # flat radiometer
-sensor.v0   = wp.vec3f(-1.0, -1.0, 0.0)
-sensor.v1   = wp.vec3f( 1.0, -1.0, 0.0)
-sensor.v2   = wp.vec3f( 1.0,  1.0, 0.0)
-sensor.v3   = wp.vec3f(-1.0,  1.0, 0.0)
+sensor.v0   = wp.vec3f(-0.003, -0.003, 0.000125)
+sensor.v1   = wp.vec3f( 0.003, -0.003, 0.000125)
+sensor.v2   = wp.vec3f( 0.003,  0.003, 0.000125)
+sensor.v3   = wp.vec3f(-0.003,  0.003, 0.000125)
 sensor.i0   = wp.int32(256)                # resX
 sensor.i1   = wp.int32(256)                # resY
 
@@ -58,7 +66,7 @@ sensor.i1   = wp.int32(256)                # resY
 # Buffers allocation
 # ──────────────────────────────────────────────────────────────────────────
 
-N_RAYS = 30_000_000
+N_RAYS = 112_500_000
 RES_X  = int(sensor.i0)
 RES_Y  = int(sensor.i1)
 
@@ -85,7 +93,7 @@ wp.launch(
     dim    = N_RAYS,
     inputs = [lightSourceArray, INPUT_SEED, FRAME_ID, rayBuffer],
 )
-
+"""
 # Diagnose ray generation
 rays_np = rayBuffer.numpy()
 
@@ -101,8 +109,8 @@ print(f"  NaN in origin    : {np.isnan(rays_np['origin']).any()}")
 print(f"  NaN in direction : {np.isnan(rays_np['direction']).any()}")
 print(f"  NaN in throughput: {np.isnan(rays_np['throughput']).any()}")
 print(f"  Direction norms  : [{np.linalg.norm(rays_np['direction'], axis=1).min():.4f}, {np.linalg.norm(rays_np['direction'], axis=1).max():.4f}]")
-
-print("Accumulating on sensor...")
+"""
+#print("Accumulating on sensor...")
 wp.launch(
     _accumulateOnSensor,
     dim    = N_RAYS,
@@ -117,7 +125,7 @@ wp.synchronize()
 # ──────────────────────────────────────────────────────────────────────────
 
 image = sensorBuffer.numpy()
-
+"""
 total_flux = image.sum()
 peak_value = image.max()
 peak_pos   = np.unravel_index(np.argmax(image), image.shape)
@@ -129,7 +137,7 @@ print(f"  Peak pixel value     : {peak_value:.6f}")
 print(f"  Peak position (i,j)  : {peak_pos}  (expected near ({RES_X//2}, {RES_Y//2}))")
 print(f"  Image shape          : {image.shape}")
 print(f"  Min / Mean / Max     : {image.min():.6e} / {image.mean():.6e} / {image.max():.6e}")
-
+"""
 # ──────────────────────────────────────────────────────────────────────────
 # Visualization
 # ──────────────────────────────────────────────────────────────────────────
