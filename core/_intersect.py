@@ -1,20 +1,14 @@
 import warp as wp
 
+from _structures import _isFlat
 from _structures import _Intersection, _Primitive, _Ray
 
-
-
-@wp.func
-def _isFlat(primitive: _Primitive) -> wp.bool:
-    #            Triangle == 0              Quad == 1
-    #        Disk/Annulus == 2
-    return primitive.type == 0 or primitive.type == 1 \
-        or primitive.type == 2
 
 @wp.func
 def _sag(primitive: _Primitive, r: wp.float32) -> wp.float32:
     rSquared = r * r
     radicand = 1. - (1. + primitive.f1) * rSquared / (primitive.f0 * primitive.f0)
+    radicand = wp.max(0.0, radicand) # Defensive clamp
 
     rFourth = rSquared * rSquared
     rSixth  = rFourth  * rSquared
@@ -42,10 +36,10 @@ def _sagDerivative(primitive: _Primitive, r: wp.float32) -> wp.float32:
     radicand = wp.max(0.0, radicand) # Defensive clamp
 
     derivative  = r / (primitive.f0 * wp.sqrt(radicand))
-    derivative += 4. * primitive.f2 * rThird
-    derivative += 6. * primitive.f3 * rFifth
-    derivative += 8. * primitive.f4 * rSeventh
-    derivative += 9. * primitive.f5 * rNinth
+    derivative += 4.  * primitive.f2 * rThird
+    derivative += 6.  * primitive.f3 * rFifth
+    derivative += 8.  * primitive.f4 * rSeventh
+    derivative += 10. * primitive.f5 * rNinth
 
     return derivative
 
@@ -344,8 +338,6 @@ def _cylinderBoundingInterval(ray: _Ray, primitive: _Primitive) -> wp.vec2f:
 
 @wp.func
 def _intersectAsphere(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -> _Intersection:
-    # Not implemented yet
-
     localAxisOrigin = primitive.v0
     zAxisUnitVector = primitive.v1 # (unit vector in the local frame)
     R    = primitive.f0 # Radius
@@ -427,7 +419,8 @@ def _intersectAsphere(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -
     dSag = _sagDerivative(primitive, rLocal)
 
     if rLocal < wp.float32(1.e-8):
-        normal3D = zAxisNorm
+        # See comment below for sgn
+        normal3D = -sgn * zAxisNorm
     else:
         radialUnit = rVec / wp.norm_l2(rVec)
         # The normal should be handled carefully: equation
@@ -489,11 +482,11 @@ def _intersect(
             candidateIntersection = _intersectQuad(ray, primitive, primitiveID)
         elif primitive.type == 2: # Disk (or annulus)
             candidateIntersection = _intersectDisk(ray, primitive, primitiveID)
-        elif primitive.type == 4: # Sphere (or spherical cap)
+        elif primitive.type == 3: # Sphere (or spherical cap)
             candidateIntersection = _intersectSphere(ray, primitive, primitiveID)
-        elif primitive.type == 5: # Cylinder
+        elif primitive.type == 4: # Cylinder
             candidateIntersection = _intersectCylinder(ray, primitive, primitiveID)
-        elif primitive.type == 6: # Asphere
+        elif primitive.type == 5: # Asphere
             candidateIntersection = _intersectAsphere(ray, primitive, primitiveID)
         else:
             continue

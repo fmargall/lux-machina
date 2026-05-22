@@ -76,8 +76,7 @@ def _sampleLightSource(
         # No spectral rendering yet
         wavelength = wp.float32(0.),
         # No last primitive info yet
-        sourcePrimitiveID = wp.int32(-1),
-        sourceConvexSide  = True
+        sourcePrimitiveID = wp.int32(-1)
     )
 
     return ray
