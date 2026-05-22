@@ -24,8 +24,10 @@ class _Material:
    Types:
    0 : Triangle
    1 : Quad
-   2 : Disk
-   3 : Annulus
+   2 : Disk (or annulus)
+   3 : Sphere (or spherical cap)
+   4 : Cylinder
+   5 : Asphere
 """
 @wp.struct
 class _Primitive:
@@ -37,6 +39,18 @@ class _Primitive:
     v3        : wp.vec3f
     f0        : wp.float32
     f1        : wp.float32
+    f2        : wp.float32
+    f3        : wp.float32
+    f4        : wp.float32
+    f5        : wp.float32
+    f6        : wp.float32
+
+@wp.func
+def _isFlat(primitive: _Primitive) -> wp.bool:
+    #            Triangle == 0              Quad == 1
+    #        Disk/Annulus == 2
+    return primitive.type == 0 or primitive.type == 1 \
+        or primitive.type == 2
 
 @wp.struct
 class _Intersection:
