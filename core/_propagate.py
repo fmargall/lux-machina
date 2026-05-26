@@ -135,7 +135,7 @@ def _propagate(
 
     primitive = primitivesBuffer[intersection.primitiveID]
     # A block may be intersected
-    if primitive.materialID <= 0:
+    if primitive.materialID < 0:
         updatedRay = _Ray(
             origin     = ray.origin,
             direction  = ray.direction,
