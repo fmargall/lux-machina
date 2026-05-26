@@ -26,7 +26,18 @@ class _Material:
    1 : Quad
    2 : Disk (or annulus)
    3 : Sphere (or spherical cap)
+       ─────────────────────────
+       v0 (wp.vec3f)  : Center
+       v1 (wp.vec3f)  : Direction of spherical cap pole (normalized)
+       f0 (wp.float32): Radius
+       f1 (wp.float32): Angle of the spherical cap: pi(/2) for an (hemi)sphere
    4 : Cylinder
+       ────────
+       v0 (wp.vec3f): Center of basis
+       v1 (wp.vec3f): Axis (normalized)
+       f0 (wp.vec3f): Radius basis
+       f1 (wp.vec3f): Height
+
    5 : Asphere
 """
 @wp.struct
