@@ -366,10 +366,19 @@ def _intersectAsphere(ray: _Ray, primitive: _Primitive, primitiveID: wp.int32) -
     # flat or bulged. The best we can choose
     # is a cylinder and two disks.
     boundingCylinder    = _Primitive(
+        type = 4, # Cylinder
+        materialID = -2, # Bounding box
         v0 = localAxisOrigin,
         v1 = zAxisNorm,
+        v2 = wp.vec3f(0.), # Dummy variable
+        v3 = wp.vec3f(0.), # Dummy variable
         f0 = rMaxWorld,
-        f1 = sagittaWorld
+        f1 = sagittaWorld,
+        f2 = wp.float32(0.), # Dummy variable
+        f3 = wp.float32(0.), # Dummy variable
+        f4 = wp.float32(0.), # Dummy variable
+        f5 = wp.float32(0.), # Dummy variable
+        f6 = wp.float32(0.)  # Dummy variable
     )
 
     interval = _cylinderBoundingInterval(ray, boundingCylinder)

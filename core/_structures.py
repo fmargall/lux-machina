@@ -37,7 +37,6 @@ class _Material:
        v1 (wp.vec3f): Axis (normalized)
        f0 (wp.vec3f): Radius basis
        f1 (wp.vec3f): Height
-
    5 : Asphere
 """
 @wp.struct

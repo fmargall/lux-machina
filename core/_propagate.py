@@ -1,7 +1,7 @@
 import warp as wp
 
 from _structures import _isFlat
-from _structures import _Intersection, _Material, _Ray
+from _structures import _Intersection, _Material, _Primitive, _Ray
 
 
 # ─────────────────────────────────────────────────────────────────────
