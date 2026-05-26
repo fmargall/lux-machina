@@ -215,7 +215,7 @@ def _propagate(
         origin     = newOrigin,
         direction  = newDirection,
         throughput = throughput,
-        pdf        = pdf,
+        pdf        = ray.pdf * pdf,
         wavelength = ray.wavelength,
 
         isAlive    = True,
