@@ -93,6 +93,23 @@ biconvexLens11.v1         = wp.vec3f(0., 0., +1.)     # Direction of spherical c
 biconvexLens11.f0         = wp.float32(0.0592)        # Radius
 biconvexLens11.f1         = wp.float32(0.447189)      # Angle of the spherical cap: pi(/2) for an (hemi)sphere
 
+# Retaining rings
+retainingRing0 = _Primitive()
+retainingRing0.type       = 2 # Annulus
+retainingRing0.materialID = -1 # Blocker
+retainingRing0.v0         = wp.vec3f(0., 0., 0.04380) # Center
+retainingRing0.v1         = wp.vec3f(0., 0., 1.) # Normal
+retainingRing0.f0         = wp.float32(0.02290) # Inner radius
+retainingRing0.f1         = wp.float32(0.02540) # Outer radius
+
+retainingRing1 = _Primitive()
+retainingRing1.type       = 2 # Annulus
+retainingRing1.materialID = -1 # Blocker
+retainingRing1.v0         = wp.vec3f(0., 0., 0.04900) # Center
+retainingRing1.v1         = wp.vec3f(0., 0., 1.) # Normal
+retainingRing1.f0         = wp.float32(0.02290) # Inner radius
+retainingRing1.f1         = wp.float32(0.02540) # Outer radius
+
 # Add hitbox sphere
 hitboxSphere = _Primitive()
 hitboxSphere.type = 3 # Sphere
@@ -103,11 +120,12 @@ hitboxSphere.f0 = wp.float32(5.)        # Radius
 hitboxSphere.f1 = wp.half_pi      # Angle of the spherical cap: pi(/2) for an (hemi)sphere
 
 #primitivesBuffer = wp.array([asphericLens00, asphericLens01, asphericLens11], dtype=_Primitive)
-primitivesBuffer = wp.array([asphericLens00, asphericLens01, asphericLens11, biconvexLens00, biconvexLens01, biconvexLens11, hitboxSphere], dtype=_Primitive)
+primitivesBuffer = wp.array([asphericLens00, asphericLens01, asphericLens11,  retainingRing0, biconvexLens00, biconvexLens01, biconvexLens11, retainingRing1, hitboxSphere], dtype=_Primitive)
+#primitivesBuffer = wp.array([asphericLens00, asphericLens01, asphericLens11, biconvexLens00, biconvexLens01, biconvexLens11, hitboxSphere], dtype=_Primitive)
 #primitivesBuffer = wp.array([hitboxSphere], dtype=_Primitive)
 
-sensorHalfSize = 0.1
-sensorDist = 0.8
+sensorHalfSize = 0.05
+sensorDist = 0.1
 sensor      = _Sensor()
 sensor.type = wp.int32(0)                  # flat radiometer
 sensor.v0   = wp.vec3f(-sensorHalfSize, -sensorHalfSize, sensorDist)
@@ -206,11 +224,11 @@ if __name__ == "__main__":
     # Build the two displays
     vizDisplay = BufferDisplay(
         extent   = (VIZ_X_MIN, VIZ_X_MAX, VIZ_Z_MIN, VIZ_Z_MAX),
-        colormap = "inferno",
+        colormap = "inferno", transform = "log1p",
     )
     sensorDisplay = BufferDisplay(
         extent   = (-sensorHalfSize, sensorHalfSize, -sensorHalfSize, sensorHalfSize),
-        colormap = "viridis",
+        colormap = "viridis", transform = "log1p",
     )
 
     # Compose the main window

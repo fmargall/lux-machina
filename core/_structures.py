@@ -36,6 +36,11 @@ class _Material:
    0 : Triangle
    1 : Quad
    2 : Disk (or annulus)
+       ─────────────────
+       v0 (wp.vec3f)  : Center
+       v1 (wp.vec3f)  : Normal
+       f0 (wp.float32): Inner radius (0 for a disk)
+       f1 (wp.float32): Outer radius
    3 : Sphere (or spherical cap)
        ─────────────────────────
        v0 (wp.vec3f)  : Center
