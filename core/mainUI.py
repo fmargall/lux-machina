@@ -1,6 +1,7 @@
+import sys
 import numpy as np
 import warp as wp
-import matplotlib.pyplot as plt
+from pyqtgraph.Qt import QtWidgets, QtCore
 
 from _structures         import (_Ray, _LightSource, _Material, _Primitive, _Sensor, _Intersection)
 from _generateRays       import _generateRays
@@ -8,6 +9,7 @@ from _intersect          import _intersect
 from _accumulateOnSensor import _accumulateOnSensor
 from _propagate          import _propagate
 from _visualize          import _visualize, _visualizeRayPaths
+from _ui                 import BufferDisplay, MainWindow
 
 
 wp.init()
@@ -119,7 +121,7 @@ sensor.i1   = wp.int32(256)                # resY
 # Buffers allocation
 # ──────────────────────────────────────────────────────────────────────────
 
-N_RAYS = 50_000_000
+N_RAYS = 1_000_000
 RES_X  = int(sensor.i0)
 RES_Y  = int(sensor.i1)
 
@@ -162,110 +164,86 @@ FRAME_ID      = wp.int32(0)
 MAX_BOUNCES   = 5
 NB_PRIMITIVES = wp.int32(len(primitivesBuffer))
 
-print(f"Generating {N_RAYS:,} rays from light source...")
-wp.launch(
-    _generateRays,
-    dim    = N_RAYS,
-    inputs = [lightSourceArray, INPUT_SEED, FRAME_ID, rayBuffer],
-)
-
-for bounce in range(MAX_BOUNCES):
-    print(f"  Bounce {bounce + 1}/{MAX_BOUNCES}...")
-
-    # 1. Find next intersection for each alive ray
-    wp.launch(
-        _intersect,
-        dim    = N_RAYS,
-        inputs = [rayBuffer, primitivesBuffer, NB_PRIMITIVES, intersectionBuffer],
-    )
-
-    # 2. Visualize ray paths for this bounce (BEFORE propagating)
-
-    wp.launch(
-        _visualize,
-        dim    = N_RAYS,
-        inputs = [rayBuffer, intersectionBuffer, vizSensor, vizBuffer],
-    )
-
+def runOneFrame(frameID: int):
     """
-    wp.launch(
-        _visualizeRayPaths,
-        dim    = (VIZ_RES_X, VIZ_RES_Z),
-        inputs = [
-            rayBuffer,
-            intersectionBuffer,
-            wp.int32(N_RAYS),
-            vizSensor,
-            vizBuffer,
-        ],
-    )
+    Run one wave of the wavefront pipeline.
+    The buffers vizBuffer and sensorBuffer accumulate across multiple frames.
     """
-
-
-
-    # 3. Accumulate on the physical sensor
+    # Each frame uses a different frameID to decorrelate the RNG
     wp.launch(
-        _accumulateOnSensor,
+        _generateRays,
         dim    = N_RAYS,
-        inputs = [rayBuffer, intersectionBuffer, sensor, sensorBuffer],
+        inputs = [lightSourceArray, INPUT_SEED, wp.int32(frameID), rayBuffer],
     )
 
-    # 4. Propagate
-    wp.launch(
-        _propagate,
-        dim    = N_RAYS,
-        inputs = [
-            intersectionBuffer,
-            primitivesBuffer,
-            materialArray,
-            INPUT_SEED,
-            FRAME_ID,
-            rayBuffer,
-        ],
-    )
+    for bounce in range(MAX_BOUNCES):
+        wp.launch(_intersect,
+                  dim=N_RAYS,
+                  inputs=[rayBuffer, primitivesBuffer, NB_PRIMITIVES, intersectionBuffer])
 
-wp.synchronize()
-print("Pipeline complete.")
+        wp.launch(_visualize,
+                  dim=N_RAYS,
+                  inputs=[rayBuffer, intersectionBuffer, vizSensor, vizBuffer])
+
+        wp.launch(_accumulateOnSensor,
+                  dim=N_RAYS,
+                  inputs=[rayBuffer, intersectionBuffer, sensor, sensorBuffer])
+
+        wp.launch(_propagate,
+                  dim=N_RAYS,
+                  inputs=[intersectionBuffer, primitivesBuffer, materialArray,
+                          INPUT_SEED, wp.int32(frameID), rayBuffer])
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Display the side view
+# UI setup and run loop
 # ──────────────────────────────────────────────────────────────────────────
 
-vizImage    = vizBuffer.numpy()
-sensorImage = sensorBuffer.numpy()
+if __name__ == "__main__":
+    app = QtWidgets.QApplication(sys.argv)
 
-fig, axes = plt.subplots(1, 2, figsize=(18, 9))
+    # Build the two displays
+    vizDisplay = BufferDisplay(
+        extent   = (VIZ_X_MIN, VIZ_X_MAX, VIZ_Z_MIN, VIZ_Z_MAX),
+        colormap = "inferno",
+    )
+    sensorDisplay = BufferDisplay(
+        extent   = (-sensorHalfSize, sensorHalfSize, -sensorHalfSize, sensorHalfSize),
+        colormap = "viridis",
+    )
 
-# Side view (xz plane): rays propagating through the optical system
-# log scale to see both bright and dim rays
-imViz = axes[0].imshow(
-    np.log1p(vizImage.T),                     # transpose: x horizontal, z vertical
-    cmap="inferno",
-    origin="lower",
-    extent=[VIZ_X_MIN, VIZ_X_MAX, VIZ_Z_MIN, VIZ_Z_MAX],
-    aspect="equal",                            # keep physical proportions
-)
-axes[0].set_title(f"Ray paths in the xz plane ({N_RAYS:,} rays, {MAX_BOUNCES} bounces, log scale)")
-axes[0].set_xlabel("x (m)")
-axes[0].set_ylabel("z (m) — optical axis")
-axes[0].axhline(0.0, color="cyan", lw=0.5, alpha=0.5)   # source plane
-axes[0].axhline(0.1, color="lime", lw=0.5, alpha=0.5)   # sensor plane
-plt.colorbar(imViz, ax=axes[0])
+    # Compose the main window
+    window = MainWindow(
+        leftDisplay  = vizDisplay,
+        rightDisplay = sensorDisplay,
+        title        = "Light Tracer",
+    )
+    window.show()
 
-# Top-down sensor image (xy plane at z = 0.1)
-imSensor = axes[1].imshow(
-    sensorImage.T,
-    cmap="viridis",
-    origin="lower",
-    extent=[-sensorHalfSize, sensorHalfSize, -sensorHalfSize, sensorHalfSize],
-)
-axes[1].set_title(f"Sensor image at z = {sensorDist} m")
-axes[1].set_xlabel("x (m)")
-axes[1].set_ylabel("y (m)")
-plt.colorbar(imSensor, ax=axes[1])
+    # ── Frame loop driven by a QTimer ──
+    # Each tick of the timer = one frame of the simulation.
+    # The timer interval is set to 0, so it runs as fast as possible
+    # while still letting Qt process events between frames.
 
-plt.tight_layout()
-plt.savefig("debug_pipeline.png", dpi=120)
-plt.show()
-print("\n  Image saved to: debug_pipeline.png")
+    frameCounter = [0]   # mutable container for the closure
+
+    def onTimerTick():
+        """Called by QTimer at each interval."""
+        # Run one simulation frame
+        runOneFrame(frameID=frameCounter[0])
+        wp.synchronize()
+
+        # Pull buffers from GPU and refresh the UI
+        window.updateViews(
+            leftBuffer  = vizBuffer.numpy(),
+            rightBuffer = sensorBuffer.numpy(),
+            frameID     = frameCounter[0],
+        )
+
+        frameCounter[0] += 1
+
+    timer = QtCore.QTimer()
+    timer.timeout.connect(onTimerTick)
+    timer.start(0)   # 0 ms = as fast as possible (after each event loop iteration)
+
+    sys.exit(app.exec())
