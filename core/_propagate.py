@@ -158,14 +158,14 @@ def _propagate(
         # Ray arrives from the +normal side
         normalForward = intersection.normal
         material      = materialsBuffer[primitive.materialID]
-        n1            = material.iorPositive
-        n2            = material.iorNegative
+        n1            = material.f0 # Refractive index in the +normal domain
+        n2            = material.f1 # Refractive index in the -normal domain
     else:
         # Ray arrives from the -normal side
         normalForward = -intersection.normal
         material      = materialsBuffer[primitive.materialID]
-        n1            = material.iorNegative
-        n2            = material.iorPositive
+        n1            = material.f1 # Refractive index in the -normal domain
+        n2            = material.f0 # Refractive index in the +normal domain
 
     # --- Computation of the Fresnel reflectance ---
     cosTheta1  = -wp.dot(ray.direction, normalForward)

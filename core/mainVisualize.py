@@ -30,8 +30,9 @@ lightSource.power = wp.float32(1.0)        # 1 W total
 lightSourceArray = wp.array([lightSource], dtype=_LightSource)
 
 bk7Material = _Material()
-bk7Material.iorPositive = wp.float32(1.00)
-bk7Material.iorNegative = wp.float32(1.52)
+bk7Material.type = 0 # Perfect Fresnel
+bk7Material.f0 = wp.float32(1.00)
+bk7Material.f1 = wp.float32(1.52)
 materialArray = wp.array([bk7Material], dtype=_Material)
 
 # Aspheric lens

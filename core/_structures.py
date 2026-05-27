@@ -15,10 +15,21 @@ class _Ray:
     # Avoid self intersections
     sourcePrimitiveID: wp.int32
 
+"""
+   Types:
+   0 : Perfect Fresnel
+       ───────────────
+       f0 (wp.float32): Refractive index in the +normal domain
+       f1 (wp.float32): Refractive index in the -normal domain
+   1 : Perfect Lambertian
+       ──────────────────
+       f0 (wp.float32): Albedo
+"""
 @wp.struct
 class _Material:
-    iorPositive: wp.float32
-    iorNegative: wp.float32
+    type: wp.int32
+    f0  : wp.float32
+    f1  : wp.float32
 
 """
    Types:

@@ -32,8 +32,9 @@ lightSource.power = wp.float32(1.0)        # 1 W total
 lightSourceArray = wp.array([lightSource], dtype=_LightSource)
 
 bk7Material = _Material()
-bk7Material.iorPositive = wp.float32(1.00)
-bk7Material.iorNegative = wp.float32(1.52)
+bk7Material.type = 0 # Perfect Fresnel
+bk7Material.f0 = wp.float32(1.00)
+bk7Material.f1 = wp.float32(1.52)
 materialArray = wp.array([bk7Material], dtype=_Material)
 
 # Aspheric lens
@@ -121,7 +122,7 @@ sensor.i1   = wp.int32(256)                # resY
 # Buffers allocation
 # ──────────────────────────────────────────────────────────────────────────
 
-N_RAYS = 1_000_000
+N_RAYS = 10_000_000
 RES_X  = int(sensor.i0)
 RES_Y  = int(sensor.i1)
 
