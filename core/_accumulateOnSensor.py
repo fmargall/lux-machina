@@ -134,3 +134,103 @@ def _projectWorldToCamera(worldPoint: wp.vec3f,
     v = camera.f1 * yDistorted + camera.f3 # fy * yDistorted + cy
 
     return wp.vec3f(u, v, cameraPoint[2])
+
+@wp.kernel
+def _checkLambertianPlateAndAccumulateOnCamera(
+    # --- Input buffers ---
+    rayBuffer         : wp.array(dtype=_Ray),
+    intersectionBuffer: wp.array(dtype=_Intersection),
+    # --- Scene data ---
+    camera            : _Camera,
+    lambertianPlateHit: _Primitive,
+    # --- Output buffer ---
+    cameraBuffer: wp.array(dtype=wp.float32, ndim=2),
+):
+    """
+    Simplified next-event estimation: for each ray, test if it reaches the
+    Lambertian plate WITHOUT being blocked by another primitive first.
+    If it does, project the hit point onto the camera and accumulate.
+
+    Future improvements:
+      - Add a shadow ray (visibility test) between hit point and camera.
+      - Loop over multiple Lambertian primitives.
+    """
+
+    ID           = wp.tid()
+    ray          = rayBuffer[ID]
+
+    # Skip dead rays
+    if not ray.isAlive:
+        return
+
+    # ── 1. Intersect ray with the Lambertian plate ──
+    plateU      = lambertianPlate.v1 - lambertianPlate.v0
+    plateV      = lambertianPlate.v3 - lambertianPlate.v0
+    plateNormal = wp.normalize(wp.cross(plateU, plateV))
+
+    denom = wp.dot(ray.direction, plateNormal)
+    if wp.abs(denom) < 1.0e-8:
+        return   # ray parallel to the plate
+
+    tPlate = wp.dot(lambertianPlate.v0 - ray.origin, plateNormal) / denom
+    if tPlate <= 0.0:
+        return   # plate is behind the ray
+
+    hitPoint = ray.origin + tPlate * ray.direction
+
+    # Check that the hit is within the parallelogram bounds
+    relPos = hitPoint - lambertianPlate.v0
+    u      = wp.dot(relPos, plateU) / wp.dot(plateU, plateU)
+    v      = wp.dot(relPos, plateV) / wp.dot(plateV, plateV)
+
+    if u < 0.0 or u > 1.0 or v < 0.0 or v > 1.0:
+        return   # outside the parallelogram
+
+    # ── 2. Check if the ray is blocked BEFORE reaching the plate ──
+    intersection = intersectionBuffer[ID]
+    if intersection.t > 0.0 and intersection.t < tPlate:
+        return   # blocked by another primitive
+
+    # ── 3. Project the hit point onto the camera image plane ──
+    proj = _projectWorldToCamera(hitPoint, camera)
+    if proj[2] <= 0.0:
+        return   # behind camera or outside image
+
+    # ── 4. Compute Lambertian contribution ──
+    cosIncident = wp.dot(ray.direction, plateNormal)
+    if cosIncident > 0.0:
+        plateNormal = -plateNormal
+    cosTheta = -wp.dot(ray.direction, plateNormal)
+
+    albedo       = wp.float32(1.0)
+    brdf         = albedo / wp.pi
+    contribution = ray.throughput * brdf * cosTheta
+
+    # ── 5. Bilinear splat onto the camera buffer ──
+    pixelU = proj[0]
+    pixelV = proj[1]
+
+    i0 = wp.int32(wp.floor(pixelU))
+    j0 = wp.int32(wp.floor(pixelV))
+    i1 = i0 + 1
+    j1 = j0 + 1
+
+    du = pixelU - wp.float32(i0)
+    dv = pixelV - wp.float32(j0)
+
+    w00 = (1.0 - du) * (1.0 - dv)
+    w10 = du         * (1.0 - dv)
+    w01 = (1.0 - du) * dv
+    w11 = du         * dv
+
+    W = camera.i0
+    H = camera.i1
+
+    if i0 >= 0 and i0 < W and j0 >= 0 and j0 < H:
+        wp.atomic_add(cameraBuffer, j0, i0, w00 * contribution)
+    if i1 >= 0 and i1 < W and j0 >= 0 and j0 < H:
+        wp.atomic_add(cameraBuffer, j0, i1, w10 * contribution)
+    if i0 >= 0 and i0 < W and j1 >= 0 and j1 < H:
+        wp.atomic_add(cameraBuffer, j1, i0, w01 * contribution)
+    if i1 >= 0 and i1 < W and j1 >= 0 and j1 < H:
+        wp.atomic_add(cameraBuffer, j1, i1, w11 * contribution)
