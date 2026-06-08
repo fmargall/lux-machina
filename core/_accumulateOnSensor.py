@@ -1,6 +1,6 @@
 import warp as wp
 
-from _structures import _Intersection, _Primitive, _Ray, _Sensor
+from _structures import _Camera, _Intersection, _Primitive, _Ray, _Sensor
 
 @wp.kernel
 def _accumulateOnSensor(
@@ -86,3 +86,51 @@ def _accumulateOnSensor(
         wp.atomic_add(sensorBuffer, i0, j1, w01 * e)
     if i1 >= 0 and i1 < resX and j1 >= 0 and j1 < resY:
         wp.atomic_add(sensorBuffer, i1, j1, w11 * e)
+
+
+
+@wp.func
+def _projectWorldToCamera(worldPoint: wp.vec3f,
+                          camera    : _Camera) -> wp.vec3f:
+    """
+    Projects a world point onto the image plane via the OpenCV pinhole model
+    Returns (u, v, depth). If depth is <= 0, the point is behind the camera.
+    """
+    # Extrinsics: from world to the camera frame:
+    cameraPoint = camera.m0 * worldPoint + camera.v0
+
+    # Check if point is behind the camera
+    if cameraPoint[2] <= wp.float32(0.0):
+        return wp.vec3f(0.0, 0.0, -1.0)
+
+    # Perspective projection
+    xPrime = cameraPoint[0] / cameraPoint[2]
+    yPrime = cameraPoint[1] / cameraPoint[2]
+
+    # Compute all radial distances squared
+    r2 = xPrime * xPrime + yPrime * yPrime
+    r4 = r2 * r2
+    r6 = r4 * r2
+
+    # Radial distortion (full 8-coefficient model)
+    radialNumerator   = wp.float32(1.0) + camera.f4 * r2 + camera.f5 * r4 + camera.f6 * r6 # 1 + k1 * r2 + k2 * r4 + k3 * r6
+    radialDenominator = wp.float32(1.0) + camera.f7 * r2 + camera.f8 * r4 + camera.f9 * r6 # 1 + k4 * r2 + k5 * r4 + k6 * r6
+    radialDistortion  = radialNumerator / radialDenominator
+
+    # Tangential distortion
+    dxTangential = wp.float32(2.) * camera.f10 * xPrime * yPrime + camera.f11 * (r2 + wp.float32(2.) * xPrime * xPrime)
+    dyTangential = camera.f10 * (r2 + wp.float32(2.) * yPrime * yPrime) + wp.float32(2.) * camera.f11 * xPrime * yPrime
+
+    # Thin prism distortion
+    dxPrism = camera.f12 * r2 + camera.f13 * r4
+    dyPrism = camera.f14 * r2 + camera.f15 * r4
+
+    # Combined distorted coordinates
+    xDistorted = xPrime * radialDistortion + dxTangential + dxPrism
+    yDistorted = yPrime * radialDistortion + dyTangential + dyPrism
+
+    # Apply intrinsics: pixel coordinates
+    u = camera.f0 * xDistorted + camera.f2 # fx * xDistorted + cx
+    v = camera.f1 * yDistorted + camera.f3 # fy * yDistorted + cy
+
+    return wp.vec3f(u, v, cameraPoint[2])
