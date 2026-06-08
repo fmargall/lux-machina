@@ -3,7 +3,7 @@ import numpy as np
 import warp as wp
 from pyqtgraph.Qt import QtWidgets, QtCore
 
-from _structures         import (_Ray, _LightSource, _Material, _Primitive, _Sensor, _Intersection)
+from _structures         import (_Camera, _Ray, _LightSource, _Material, _Primitive, _Sensor, _Intersection)
 from _generateRays       import _generateRays
 from _intersect          import _intersect
 from _accumulateOnSensor import _accumulateOnSensor
@@ -119,10 +119,7 @@ hitboxSphere.v1 = wp.vec3f(0., 0., +1.)     # Direction of spherical cap pole (n
 hitboxSphere.f0 = wp.float32(5.)        # Radius
 hitboxSphere.f1 = wp.half_pi      # Angle of the spherical cap: pi(/2) for an (hemi)sphere
 
-#primitivesBuffer = wp.array([asphericLens00, asphericLens01, asphericLens11], dtype=_Primitive)
 primitivesBuffer = wp.array([asphericLens00, asphericLens01, asphericLens11,  retainingRing0, biconvexLens00, biconvexLens01, biconvexLens11, retainingRing1, hitboxSphere], dtype=_Primitive)
-#primitivesBuffer = wp.array([asphericLens00, asphericLens01, asphericLens11, biconvexLens00, biconvexLens01, biconvexLens11, hitboxSphere], dtype=_Primitive)
-#primitivesBuffer = wp.array([hitboxSphere], dtype=_Primitive)
 
 sensorHalfSize = 0.05
 sensorDist = 0.1
@@ -134,6 +131,36 @@ sensor.v2   = wp.vec3f( sensorHalfSize,  sensorHalfSize, sensorDist)
 sensor.v3   = wp.vec3f(-sensorHalfSize,  sensorHalfSize, sensorDist)
 sensor.i0   = wp.int32(256)                # resX
 sensor.i1   = wp.int32(256)                # resY
+
+
+# ── Scene setup ──
+# Add a Lambertian plate (as a Primitive3D, but NOT in primitivesBuffer)
+lambertianPlate      = _Primitive()
+lambertianPlate.v0   = wp.vec3f(-0.05, -0.05, 0.15)   # corner of the plate
+lambertianPlate.v1   = wp.vec3f( 0.05, -0.05, 0.15)
+lambertianPlate.v2   = wp.vec3f( 0.05,  0.05, 0.15)
+lambertianPlate.v3   = wp.vec3f(-0.05,  0.05, 0.15)
+
+# Define the camera (an OpenCV pinhole camera)
+camera = _Camera()
+camera.type = wp.int32(0)
+camera.i0   = wp.int32(640)
+camera.i1   = wp.int32(480)
+camera.f0   = wp.float32(500.0)   # fx
+camera.f1   = wp.float32(500.0)   # fy
+camera.f2   = wp.float32(320.0)   # cx
+camera.f3   = wp.float32(240.0)   # cy
+# Identity rotation and a translation: camera looks at origin from offset
+camera.m0   = wp.mat33f(1.0, 0.0, 0.0,
+                         0.0, 1.0, 0.0,
+                         0.0, 0.0, 1.0)
+camera.v0   = wp.vec3f(0.0, 0.2, 0.1)   # camera positioned 20 cm above the optical axis
+# Distortion coefficients all zero for now
+camera.f4 = wp.float32(0.0)
+# ... etc., all distortion coeffs zeroed ...
+
+# ── Allocate camera buffer ──
+cameraBuffer = wp.zeros((camera.i1, camera.i0), dtype=wp.float32)   # (height, width)
 
 
 # ──────────────────────────────────────────────────────────────────────────
