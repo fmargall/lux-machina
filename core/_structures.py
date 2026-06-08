@@ -24,6 +24,7 @@ class _Ray:
    1 : Perfect Lambertian
        ──────────────────
        f0 (wp.float32): Albedo
+       f1 (wp.float32): Unused
 """
 @wp.struct
 class _Material:
