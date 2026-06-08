@@ -19,7 +19,7 @@ def _alignWithNormal(localDirection: wp.vec3f, normal: wp.vec3f) -> wp.vec3f:
          + localDirection[2] * normal
 
 @wp.func
-def _sampleLightSource(
+def _sampleAreaLight(
     lightSource: _LightSource,
     N          : wp.int32,
     rngState   : wp.uint32
@@ -80,6 +80,78 @@ def _sampleLightSource(
     )
 
     return ray
+
+@wp.func
+def _samplePointLight(
+    lightSource: _LightSource,
+    N          : wp.int32,
+    rngState   : wp.uint32
+) -> _Ray:
+
+    # Point light: origin = v0, cone axis = v1, half-aperture = f0.
+    # f0 = pi corresponds to isotropic emission over the full sphere.
+    origin    = lightSource.v0
+    axis      = lightSource.v1
+    halfAngle = lightSource.f0
+
+    # ── Uniform solid-angle sampling inside the cone of half-angle f0 ──
+    # cos(theta) uniform in [cos(f0), 1], phi uniform in [0, 2*pi)
+    xi = wp.sample_unit_square(rngState)
+    xi = xi + wp.vec2f(0.5, 0.5) # [0; 1]
+
+    cosMin   = wp.cos(halfAngle)
+    cosTheta = cosMin + xi[0] * (wp.float32(1.) - cosMin)
+    # Clamp for numerical safety before sqrt (FP error near grazing)
+    sinTheta = wp.sqrt(wp.max(wp.float32(0.),
+                              wp.float32(1.) - cosTheta * cosTheta))
+    phi      = wp.float32(2.) * wp.pi * xi[1]
+
+    localDir = wp.vec3f(sinTheta * wp.cos(phi),
+                        sinTheta * wp.sin(phi),
+                        cosTheta)
+
+    # Rotate from local frame (z = up) to world frame (z = axis)
+    direction = _alignWithNormal(localDir, axis)
+
+    # Cone solid angle:
+    #   Omega = 2*pi * (1 - cos(f0))
+    #   f0 = pi   -> Omega = 4*pi   (isotropic, full sphere)
+    #   f0 = pi/2 -> Omega = 2*pi   (hemisphere)
+    solidAngle   = wp.float32(2.) * wp.pi * (wp.float32(1.) - cosMin)
+    pdfDirection = wp.float32(1.) / solidAngle
+
+    # Intensity is uniform : I = phi / Omega (W/sr).
+    # With direction pdf = 1/Omega, the MC estimator collapses to phi / N
+    throughput = lightSource.power / wp.float32(N)
+
+    ray = _Ray(
+        isAlive           = True,
+        origin            = origin,
+        direction         = direction,
+        throughput        = throughput,
+        # Position is a Dirac delta and is folded into the
+        # throughput so only the directional pdf is stored
+        pdf               = pdfDirection,
+        depth             = wp.int32(0),
+        wavelength        = wp.float32(0.),
+        sourcePrimitiveID = wp.int32(-1)
+    )
+
+    return ray
+
+@wp.func
+def _sampleLightSource(
+    lightSource: _LightSource,
+    N          : wp.int32,
+    rngState   : wp.uint32
+) -> _Ray:
+    # Dispatch on light source type
+    # (see _LightSource docstring).
+    if lightSource.type == wp.int32(1):
+        return _samplePointLight(lightSource, N, rngState)
+
+    # By default: type 0 => lambertian parallelogram
+    return _sampleAreaLight(lightSource, N, rngState)
 
 @wp.kernel
 def _generateRays(

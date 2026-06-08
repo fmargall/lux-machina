@@ -84,6 +84,29 @@ class _Intersection:
     normal     : wp.vec3f
     primitiveID: wp.int32
 
+"""
+    Types:
+    0 : Lambertian parallelogram
+        ────────────────────────
+        v3 --- v2
+        |      |
+        |      |
+        v0 --- v1
+        v0 (wp.vec3f)     : First  vertex (corner)
+        v1 (wp.vec3f)     : Second vertex (corner)
+        v2 (wp.vec3f)     : Third  vertex (corner)
+        v3 (wp.vec3f)     : Fourth vertex (corner)
+        f0 (wp.float32)   : Unused
+        power (wp.float32): Total emitted power (W)
+    1 : Point light
+        ───────────
+        v0 (wp.vec3f)     : Origin
+        v1 (wp.vec3f)     : Direction (normalized)
+        v2 (wp.vec3f)     : Unused
+        v3 (wp.vec3f)     : Unused
+        f0 (wp.float32)   : Aperture half angle (in radians): pi for isotropic
+        power (wp.float32): Total emitted power (W)
+"""
 @wp.struct
 class _LightSource:
     type : wp.int32
@@ -91,6 +114,7 @@ class _LightSource:
     v1   : wp.vec3f
     v2   : wp.vec3f
     v3   : wp.vec3f
+    f0   : wp.float32
     power: wp.float32
 
 @wp.struct
