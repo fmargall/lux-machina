@@ -140,7 +140,7 @@ sensor.i1   = wp.int32(256)                # resY
 # Buffers allocation
 # ──────────────────────────────────────────────────────────────────────────
 
-N_RAYS = 10_000_000
+N_RAYS = 10
 RES_X  = int(sensor.i0)
 RES_Y  = int(sensor.i1)
 
@@ -238,6 +238,7 @@ if __name__ == "__main__":
         title        = "Light Tracer",
     )
     window.show()
+    window.adjustSize()
 
     # ── Frame loop driven by a QTimer ──
     # Each tick of the timer = one frame of the simulation.
