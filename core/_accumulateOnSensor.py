@@ -141,8 +141,8 @@ def _checkLambertianPlateAndAccumulateOnCamera(
     rayBuffer         : wp.array(dtype=_Ray),
     intersectionBuffer: wp.array(dtype=_Intersection),
     # --- Scene data ---
-    camera            : _Camera,
-    lambertianPlateHit: _Primitive,
+    camera         : _Camera,
+    lambertianPlate: _Primitive,
     # --- Output buffer ---
     cameraBuffer: wp.array(dtype=wp.float32, ndim=2),
 ):
