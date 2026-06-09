@@ -181,7 +181,7 @@ if __name__ == "__main__":
     # Build the two displays
     vizDisplay = BufferDisplay(
         extent   = (VIZ_X_MIN, VIZ_X_MAX, VIZ_Z_MIN, VIZ_Z_MAX),
-        colormap = "inferno", transform = "linear",
+        colormap = "inferno", transform = "log1p",
     )
     sensorDisplay = BufferDisplay(
         extent   = (-sensorHalfSize, sensorHalfSize, -sensorHalfSize, sensorHalfSize),
