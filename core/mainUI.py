@@ -6,7 +6,7 @@ from pyqtgraph.Qt import QtWidgets, QtCore
 from _structures         import (_Camera, _Ray, _LightSource, _Material, _Primitive, _Sensor, _Intersection)
 from _generateRays       import _generateRays
 from _intersect          import _intersect
-from _accumulateOnSensor import _accumulateOnSensor
+from _accumulateOnSensor import _accumulateOnSensor, _checkLambertianPlateAndAccumulateOnCamera
 from _propagate          import _propagate
 from _visualize          import _visualize, _visualizeRayPaths
 from _ui                 import BufferDisplay, MainWindow
@@ -132,7 +132,6 @@ sensor.v3   = wp.vec3f(-sensorHalfSize,  sensorHalfSize, sensorDist)
 sensor.i0   = wp.int32(256)                # resX
 sensor.i1   = wp.int32(256)                # resY
 
-
 # ── Scene setup ──
 # Add a Lambertian plate (as a Primitive3D, but NOT in primitivesBuffer)
 lambertianPlate      = _Primitive()
@@ -144,30 +143,32 @@ lambertianPlate.v3   = wp.vec3f(-0.05,  0.05, 0.15)
 # Define the camera (an OpenCV pinhole camera)
 camera = _Camera()
 camera.type = wp.int32(0)
-camera.i0   = wp.int32(640)
-camera.i1   = wp.int32(480)
+camera.i0   = wp.int32(256)
+camera.i1   = wp.int32(256)
 camera.f0   = wp.float32(500.0)   # fx
 camera.f1   = wp.float32(500.0)   # fy
 camera.f2   = wp.float32(320.0)   # cx
 camera.f3   = wp.float32(240.0)   # cy
 # Identity rotation and a translation: camera looks at origin from offset
 camera.m0   = wp.mat33f(1.0, 0.0, 0.0,
-                         0.0, 1.0, 0.0,
-                         0.0, 0.0, 1.0)
-camera.v0   = wp.vec3f(0.0, 0.2, 0.1)   # camera positioned 20 cm above the optical axis
+                        0.0, 1.0, 0.0,
+                        0.0, 0.0, 1.0)
+camera.v0   = wp.vec3f(0.0, 0.0, -0.1)   # camera positioned 20 cm above the optical axis
 # Distortion coefficients all zero for now
 camera.f4 = wp.float32(0.0)
 # ... etc., all distortion coeffs zeroed ...
 
-# ── Allocate camera buffer ──
-cameraBuffer = wp.zeros((camera.i1, camera.i0), dtype=wp.float32)   # (height, width)
+CAM_W = int(camera.i0)
+CAM_H = int(camera.i1)
 
+# ── Allocate camera buffer ──
+cameraBuffer = wp.zeros((CAM_H, CAM_W), dtype=wp.float32)   # (height, width)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Buffers allocation
 # ──────────────────────────────────────────────────────────────────────────
 
-N_RAYS = 10
+N_RAYS = 10_000_000
 RES_X  = int(sensor.i0)
 RES_Y  = int(sensor.i1)
 
@@ -207,7 +208,7 @@ vizBuffer = wp.zeros((VIZ_RES_X, VIZ_RES_Z), dtype=wp.float32)
 
 INPUT_SEED    = wp.int32(42)
 FRAME_ID      = wp.int32(0)
-MAX_BOUNCES   = 5
+MAX_BOUNCES   = 10
 NB_PRIMITIVES = wp.int32(len(primitivesBuffer))
 
 def runOneFrame(frameID: int):
@@ -231,6 +232,10 @@ def runOneFrame(frameID: int):
                   dim=N_RAYS,
                   inputs=[rayBuffer, intersectionBuffer, vizSensor, vizBuffer])
 
+        wp.launch(_checkLambertianPlateAndAccumulateOnCamera,
+                  dim=N_RAYS,
+                  inputs=[rayBuffer, intersectionBuffer, camera, lambertianPlate, cameraBuffer])
+
         wp.launch(_accumulateOnSensor,
                   dim=N_RAYS,
                   inputs=[rayBuffer, intersectionBuffer, sensor, sensorBuffer])
@@ -251,17 +256,21 @@ if __name__ == "__main__":
     # Build the two displays
     vizDisplay = BufferDisplay(
         extent   = (VIZ_X_MIN, VIZ_X_MAX, VIZ_Z_MIN, VIZ_Z_MAX),
-        colormap = "inferno", transform = "log1p",
+        colormap = "inferno", transform = "linear",
     )
     sensorDisplay = BufferDisplay(
         extent   = (-sensorHalfSize, sensorHalfSize, -sensorHalfSize, sensorHalfSize),
-        colormap = "viridis", transform = "log1p",
+        colormap = "viridis", transform = "linear",
+    )
+    cameraDisplay = BufferDisplay(
+        extent   = (0, CAM_W, 0, CAM_H),
+        colormap = "viridis",
     )
 
     # Compose the main window
     window = MainWindow(
         leftDisplay  = vizDisplay,
-        rightDisplay = sensorDisplay,
+        rightDisplay = cameraDisplay,
         title        = "Light Tracer",
     )
     window.show()
@@ -283,7 +292,7 @@ if __name__ == "__main__":
         # Pull buffers from GPU and refresh the UI
         window.updateViews(
             leftBuffer  = vizBuffer.numpy(),
-            rightBuffer = sensorBuffer.numpy(),
+            rightBuffer = cameraBuffer.numpy(),
             frameID     = frameCounter[0],
         )
 
