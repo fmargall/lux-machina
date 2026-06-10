@@ -107,6 +107,15 @@ class _Intersection:
         v3 (wp.vec3f)     : Unused
         f0 (wp.float32)   : Aperture half angle (in radians): pi for isotropic
         power (wp.float32): Total emitted power (W)
+   2 : Gaussian beam
+       ─────────────
+       v0 (wp.vec3f)     : Origin
+       v1 (wp.vec3f)     : Direction (normalized)
+       v2 (wp.vec3f)     : Unused
+       v3 (wp.vec3f)     : Unused
+       f0 (wp.float32)   : Beam waist radius
+       power (wp.float32): Total emitted power (W)
+
 """
 @wp.struct
 class _LightSource:

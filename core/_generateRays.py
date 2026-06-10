@@ -2,6 +2,7 @@ import warp as wp
 
 from _structures import _LightSource, _Primitive, _Ray
 
+
 @wp.func
 def _alignWithNormal(localDirection: wp.vec3f, normal: wp.vec3f) -> wp.vec3f:
     # Surely this can be optimized in the future
@@ -140,6 +141,71 @@ def _samplePointLight(
     return ray
 
 @wp.func
+def _sampleGaussianBeam(
+    lightSource: _LightSource,
+    N          : wp.int32,
+    rngState   : wp.uint32
+) -> _Ray:
+
+    origin = lightSource.v0
+    axis   = lightSource.v1
+    w0     = lightSource.f0
+
+    # ── Position sampling in the waist plane ──
+    sigmaPos = wp.float32(0.5) * w0
+    localX   = sigmaPos * wp.randn(rngState)
+    localY   = sigmaPos * wp.randn(rngState)
+
+    # Move offset from local frame (z = up) to world frame (z = axis)
+    localPos  = wp.vec3f(localX, localY, wp.float32(0.))
+    rayOrigin = origin + _alignWithNormal(localPos, axis)
+
+    # For now, the wavevelength is hardcoded to H-alpha, but it could
+    # be sampled from a spectrum associated to the source more later.
+    _WAVELENGTH = wp.float32(656.28e-9)
+
+    # ── Direction sampling (paraxial Gaussian in angle) ──
+    sigmaDir = _WAVELENGTH / (wp.float32(2.) * wp.pi * w0)
+    thetaX   = sigmaDir * wp.randn(rngState)
+    thetaY   = sigmaDir * wp.randn(rngState)
+
+    # Paraxial approximation : local direction ≈ (theta_x, theta_y, 1)
+    localDir  = wp.normalize(wp.vec3f(thetaX, thetaY, wp.float32(1.)))
+    direction = _alignWithNormal(localDir, axis)
+
+    # ── PDFs (position : per unit area ; direction : per unit solid angle) ──
+    invTwoSigPos2 = wp.float32(1.) / (wp.float32(2.) * sigmaPos * sigmaPos)
+    invTwoSigDir2 = wp.float32(1.) / (wp.float32(2.) * sigmaDir * sigmaDir)
+
+    r2pos = localX * localX + localY * localY
+    r2dir = thetaX * thetaX + thetaY * thetaY
+
+    pdfPosition  = invTwoSigPos2 / wp.pi * wp.exp(-r2pos * invTwoSigPos2)
+    pdfDirection = invTwoSigDir2 / wp.pi * wp.exp(-r2dir * invTwoSigDir2)
+
+    # ── Throughput ──
+    # Importance sampling matches the source emission distribution exactly
+    # (position and direction sampled from their actual Gaussian profiles),
+    # so the MC estimator collapses to phi / N -- same trick as the
+    # lambertian and point-light samplers.
+    throughput = lightSource.power / wp.float32(N)
+
+    ray = _Ray(
+        isAlive           = True,
+        origin            = rayOrigin,
+        direction         = direction,
+        throughput        = throughput,
+        # Position is a Dirac delta and is folded into the
+        # throughput so only the directional pdf is stored
+        pdf               = pdfPosition * pdfDirection,
+        depth             = wp.int32(0),
+        wavelength        = _WAVELENGTH,
+        sourcePrimitiveID = wp.int32(-1)
+    )
+
+    return ray
+
+@wp.func
 def _sampleLightSource(
     lightSource: _LightSource,
     N          : wp.int32,
@@ -147,8 +213,12 @@ def _sampleLightSource(
 ) -> _Ray:
     # Dispatch on light source type
     # (see _LightSource docstring).
-    if lightSource.type == wp.int32(1):
+
+    if   lightSource.type == wp.int32(1): # Point light
         return _samplePointLight(lightSource, N, rngState)
+
+    elif lightSource.type == wp.int32(2): # Gaussian beam
+        return _sampleGaussianBeam(lightSource, N, rngState)
 
     # By default: type 0 => lambertian parallelogram
     return _sampleAreaLight(lightSource, N, rngState)
